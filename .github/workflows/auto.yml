@@ -2,21 +2,20 @@ name: Calcul SST Quotidien
 
 on:
   schedule:
-    # S'exécute automatiquement TOUS LES JOURS à 07h00 UTC (8h ou 9h en France selon l'heure d'été)
     - cron: '0 7 * * *'
-  workflow_dispatch: # Permet de lancer le script manuellement en 1 clic pour tester
+  workflow_dispatch: 
 
 jobs:
   run-sst:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Donne au robot le droit de modifier le fichier CSV dans votre dépôt
+      contents: write 
     steps:
       - name: Récupérer le code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Installer Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -25,11 +24,3 @@ jobs:
 
       - name: Exécuter le script
         run: python script.py
-
-      - name: Enregistrer et publier le CSV mis à jour
-        run: |
-          git config --global user.name "SST-Bot"
-          git config --global user.email "bot@sst.com"
-          git add temperatures_plages.csv
-          git commit -m "Mise à jour automatique SST" || exit 0
-          git push
