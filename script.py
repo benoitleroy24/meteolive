@@ -8,21 +8,19 @@ import pandas as pd
 import xarray as xr
 
 # ==========================================
-# 2. CALCUL DYNAMIQUE DE LA DATE (HIER)
+# 2. CALCUL DYNAMIQUE DE LA DATE ET DE L'URL
 # ==========================================
-# On prend J-1 car les données "Near Real Time" (NRT) du jour même 
-# ne sont pas encore totalement consolidées ou disponibles le matin.
+# On calcule la date d'hier
 hier = datetime.now() - timedelta(days=1)
 annee = hier.strftime("%Y")
-jour_annee = hier.strftime("%j") # Numéro du jour de 001 à 366
+jour_annee = hier.strftime("%j") # Numéro du jour (ex: 136)
+date_hms = hier.strftime("%Y%m%d") # Format AAAAMMJJ (ex: 20260516)
 
-# Construction de l'URL Ifremer (Dossier du jour)
+# Construction de l'URL du dossier
 base_url = f"https://data-cersat.ifremer.fr/data/sea-surface-temperature/odyssea/l4/glob/nrt/data/v2.1/{annee}/{jour_annee}/"
 
-# Modèle de nom de fichier standard pour le produit ODYSSEA L4 NRT
-# Format type : YYYYMMDD000000-IFR-L4_GHRSST-SSTfnd-ODYSSEA-GLOB_NRT-v02.0-fv02.1.nc
-date_str = hier.strftime("%Y%m%d")
-nom_fichier = f"{date_str}000000-IFR-L4_GHRSST-SSTfnd-ODYSSEA-GLOB_NRT-v02.0-fv02.1.nc"
+# Construction dynamique du nom du fichier selon votre modèle trouvé
+nom_fichier = f"{date_hms}000000-ifr-l4_ghrsst-sstfnd-odyssea-glob_010-v02.1-fv01.0.nc"
 
 URL_FICHIER = base_url + nom_fichier
 LOCAL_NC = "sst_du_jour.nc"
