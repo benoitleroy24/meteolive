@@ -1,32 +1,47 @@
-# ==========================================
-# 1. IMPORTS
-# ==========================================
+import os
+import json
 from datetime import datetime, timedelta
 import urllib.request
 import numpy as np
 import pandas as pd
 import xarray as xr
+import gspread
+from google.oauth2.service_account import Credentials
+
+# ==========================================
+# 1. CONFIGURATION (À CONFIGURER AVEC VOS INFOS)
+# ==========================================
+# Mettez ici l'ID de votre classeur (présent dans l'URL de votre Google Sheet)
+SPREADSHEET_ID = "VOTRE_ID_REEL_DE_GOOGLE_SHEET"
+# Mettez ici le nom exact de l'onglet cible dans votre classeur
+NOM_ONGLET = "Données SST"
+
+# Récupération automatique de la clé d'accès Google stockée dans les secrets GitHub
+google_secrets = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+creds = Credentials.from_service_account_info(google_secrets, scopes=scopes)
+gc = gspread.authorize(creds)
 
 # ==========================================
 # 2. CALCUL DYNAMIQUE DE LA DATE ET DE L'URL
 # ==========================================
-# On calcule la date d'hier
 hier = datetime.now() - timedelta(days=1)
 annee = hier.strftime("%Y")
-jour_annee = hier.strftime("%j") # Numéro du jour (ex: 136)
-date_hms = hier.strftime("%Y%m%d") # Format AAAAMMJJ (ex: 20260516)
+jour_annee = hier.strftime("%j")
+date_hms = hier.strftime("%Y%m%d")
 
-# Construction de l'URL du dossier
 base_url = f"https://data-cersat.ifremer.fr/data/sea-surface-temperature/odyssea/l4/glob/nrt/data/v2.1/{annee}/{jour_annee}/"
-
-# Construction dynamique du nom du fichier avec la casse exacte de l'Ifremer
 nom_fichier = f"{date_hms}000000-IFR-L4_GHRSST-SSTfnd-ODYSSEA-GLOB_010-v02.1-fv01.0.nc"
 
 URL_FICHIER = base_url + nom_fichier
 LOCAL_NC = "sst_du_jour.nc"
 
 # ==========================================
-# 3. BASE DE DONNÉES DES PLAGES
+# 3. BASE DE DONNÉES DES 85 PLAGES
 # ==========================================
 DATA_PLAGES = [
     {"id_plage": 39, "nom_plage": "AGDE", "situation": "GOLFE DU LION", "lat": 43.30829, "lon": 3.476137},
@@ -119,15 +134,14 @@ DATA_PLAGES = [
 plages = pd.DataFrame(DATA_PLAGES)
 
 # ==========================================
-# 4. DOWNLOAD ET INTERPOLATION
+# 4. TÉLÉCHARGEMENT ET INTERPOLATION
 # ==========================================
-print(f"Tentative de téléchargement depuis : {URL_FICHIER}")
+print(f"Tentative de téléchargement : {URL_FICHIER}")
 try:
     urllib.request.urlretrieve(URL_FICHIER, LOCAL_NC)
     print("Téléchargement réussi.")
 except Exception as e:
     print(f"Erreur de téléchargement : {e}")
-    print("Le fichier de l'Ifremer n'est peut-être pas encore disponible pour cette date.")
     exit(1)
 
 ds = xr.open_dataset(LOCAL_NC)
@@ -168,7 +182,23 @@ for _, row in plages.iterrows():
         "SST_C": sst_c
     })
 
-# Export du résultat final
 result_df = pd.DataFrame(results)
-result_df.to_csv("temperatures_plages.csv", index=False)
-print("✨ Fichier 'temperatures_plages.csv' généré avec succès !")
+
+# ==========================================
+# 5. ENVOI DIRECT DANS L'ONGLET GOOGLE SHEETS
+# ==========================================
+print(f"Connexion à Google Sheets (Classeur ID: {SPREADSHEET_ID})...")
+wb = gc.open_by_key(SPREADSHEET_ID)
+
+try:
+    output_sheet = wb.worksheet(NOM_ONGLET)
+except gspread.exceptions.WorksheetNotFound:
+    print(f"L'onglet '{NOM_ONGLET}' n'existe pas. Création automatique...")
+    output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="1000", cols="10")
+
+# Nettoyage de l'onglet et injection des données
+output_sheet.clear()
+data_to_write = [result_df.columns.values.tolist()] + result_df.values.tolist()
+output_sheet.update(values=data_to_write, range_name="A1")
+
+print(f"✨ L'onglet '{NOM_ONGLET}' a été mis à jour directement avec succès !")
