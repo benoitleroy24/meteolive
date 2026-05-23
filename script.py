@@ -134,7 +134,7 @@ DATA_PLAGES = [
 plages = pd.DataFrame(DATA_PLAGES)
 
 # ==========================================
-# 4. TÉLÉCHARGEMENT ET INTERPOLATION
+# 4. TÉLÉCHARGEMENT ET RECHERCHE DE LA TEMPÉRATURE
 # ==========================================
 print(f"Tentative de téléchargement : {URL_FICHIER}")
 try:
@@ -157,29 +157,47 @@ results = []
 for _, row in plages.iterrows():
     lat_plage, lon_plage = row["lat"], row["lon"]
     sst_k, distance_km = np.nan, np.nan
+    
+    # Étape A : On tente d'interpole directement sur le point GPS
     try:
         interpolated_point = ds["analysed_sst"].interp(lat=lat_plage, lon=lon_plage, method="linear")
         val = interpolated_point.values.item()
         if not np.isnan(val):
             sst_k, distance_km = val, 0.0
-        else:
-            lat_min, lat_max = sorted([lat_plage - 0.1, lat_plage + 0.1])
-            lon_min, lon_max = sorted([lon_plage - 0.1, lon_plage + 0.1])
+    except:
+        pass
+        
+    # Étape B : Si le point précis est "sur la terre" (vide), on cherche l'eau tout autour
+    if np.isnan(sst_k):
+        try:
+            # On élargit la zone de recherche à un carré de 0.4 degré autour de la plage
+            lat_min, lat_max = sorted([lat_plage - 0.2, lat_plage + 0.2])
+            lon_min, lon_max = sorted([lon_plage - 0.2, lon_plage + 0.2])
+            
+            # On extrait cette zone marine
             subset = ds["analysed_sst"].sel(lat=slice(lat_min, lat_max), lon=slice(lon_min, lon_max))
             local_df = subset.to_dataframe().reset_index().dropna()
+            
+            # Si on trouve des pixels d'eau dans cette zone, on prend le plus proche de la plage
             if not local_df.empty:
                 local_df["dist"] = local_df.apply(lambda r: haversine_distance(lat_plage, lon_plage, r["lat"], r["lon"]), axis=1)
                 closest_row = local_df.loc[local_df["dist"].idxmin()]
                 sst_k = closest_row["analysed_sst"]
                 distance_km = closest_row["dist"]
-    except:
-        pass
+        except:
+            pass
     
-    sst_c = round(sst_k - 273.15, 2) if not np.isnan(sst_k) else ""
+    # Conversion du Kelvin en Celsius (°C)
+    sst_c = round(sst_k - 273.15, 1) if not np.isnan(sst_k) else "Non disponible"
+    
     results.append({
-        "ID_PLAGE": row["id_plage"], "NOM_PLAGE": row["nom_plage"], "SITUATION": row["situation"],
-        "LAT": lat_plage, "LON": lon_plage, "DISTANCE_KM": round(distance_km, 2) if not np.isnan(distance_km) else "",
-        "SST_C": sst_c
+        "ID_PLAGE": row["id_plage"],
+        "NOM_PLAGE": row["nom_plage"],
+        "SITUATION": row["situation"],
+        "LAT": lat_plage,
+        "LON": lon_plage,
+        "DISTANCE_MER_KM": round(distance_km, 2) if not np.isnan(distance_km) else "",
+        "SST_CELSIUS": sst_c
     })
 
 result_df = pd.DataFrame(results)
