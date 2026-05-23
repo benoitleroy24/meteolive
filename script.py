@@ -10,8 +10,8 @@ from google.oauth2.service_account import Credentials
 # ==========================================
 # CONFIGURATION GOOGLE SHEETS
 # ==========================================
-SPREADSHEET_ID = "VOTRE_ID_REEL_DE_GOOGLE_SHEET"
-NOM_ONGLET = "Données Météo France"
+SPREADSHEET_ID = "1PJV98b4GkmHZsMF7uo9_eBUQG25JGaEdNJq0DvD9Z_4"
+NOM_ONGLET = "Tempé plages"
 
 # Connexion Google (via votre secret GitHub)
 google_secrets = json.loads(os.environ["GOOGLE_CREDENTIALS"])
