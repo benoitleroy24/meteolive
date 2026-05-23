@@ -19,8 +19,8 @@ date_hms = hier.strftime("%Y%m%d") # Format AAAAMMJJ (ex: 20260516)
 # Construction de l'URL du dossier
 base_url = f"https://data-cersat.ifremer.fr/data/sea-surface-temperature/odyssea/l4/glob/nrt/data/v2.1/{annee}/{jour_annee}/"
 
-# Construction dynamique du nom du fichier selon votre modèle trouvé
-nom_fichier = f"{date_hms}000000-ifr-l4_ghrsst-sstfnd-odyssea-glob_010-v02.1-fv01.0.nc"
+# Construction dynamique du nom du fichier avec la casse exacte de l'Ifremer
+nom_fichier = f"{date_hms}000000-IFR-L4_GHRSST-SSTfnd-ODYSSEA-GLOB_010-v02.1-fv01.0.nc"
 
 URL_FICHIER = base_url + nom_fichier
 LOCAL_NC = "sst_du_jour.nc"
