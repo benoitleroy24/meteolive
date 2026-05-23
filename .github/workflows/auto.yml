@@ -2,14 +2,12 @@ name: Calcul SST Quotidien
 
 on:
   schedule:
-    - cron: '0 7 * * *'
-  workflow_dispatch: 
+    - cron: '0 7 * * *' # Exécution automatique tous les matins
+  workflow_dispatch: # Bouton pour tester manuellement
 
 jobs:
   run-sst:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write 
     steps:
       - name: Récupérer le code
         uses: actions/checkout@v4
@@ -22,5 +20,21 @@ jobs:
       - name: Installer les bibliothèques
         run: pip install numpy pandas xarray netcdf4
 
-      - name: Exécuter le script
+      - name: Exécuter le script Python
         run: python script.py
+
+      # --- L'ACTION QUI IMPORTE DANS LE SHEETS PRÉCIS ---
+      - name: Transférer le CSV vers Google Sheets
+        uses: jwtly/csv-to-google-sheets-action@v1.0.0
+        with:
+          # On utilise la clé secrète configurée à l'étape 2
+          google-service-account-key: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          
+          # L'ID de votre classeur (présent dans l'URL de votre Google Sheet)
+          spreadsheet-id: 'VOTRE_ID_REEL_DE_GOOGLE_SHEET'
+          
+          # LE NOM EXACT DE LA FEUILLE (L'ONGLET) OÙ COPIER LES DONNÉES
+          worksheet-name: 'Données SST'
+          
+          # Le fichier généré par le script Python
+          csv-file-path: 'temperatures_plages.csv'
