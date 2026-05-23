@@ -1,7 +1,14 @@
 name: Calcul SST Quotidien
 
 on:
-  workflow_dispatch:
+  schedule:
+    # S'exécute toutes les 5 minutes entre 00:00 UTC et 00:59 UTC chaque jour
+    # (Soit de 2h00 à 2h59 du matin en heure française d'été)
+    - cron: '*/5 0 * * *'
+  workflow_dispatch: # Vous permet de toujours pouvoir le lancer manuellement en journée
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   run-sst:
