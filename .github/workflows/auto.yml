@@ -1,10 +1,7 @@
 name: Calcul SST Quotidien
 
 on:
-  schedule:
-    # S'exécute automatiquement tous les jours à 07h00 UTC (9h00 du matin à Paris en été)
-    - cron: '0 7 * * *'
-  workflow_dispatch: # Permet de lancer le robot manuellement d'un simple clic
+  workflow_dispatch:
 
 jobs:
   run-sst:
@@ -18,11 +15,12 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Installer toutes les bibliothèques nécessaires
-        run: pip install numpy pandas xarray netcdf4 gspread google-auth beautifulsoup4 requests
+      - name: Installer les bibliothèques
+        run: |
+          pip install pandas gspread google-auth playwright
+          playwright install chromium
 
       - name: Exécuter le script Python
         env:
-          # On transmet la clé secrète de Google sous le nom attendu par votre script
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
         run: python script.py
