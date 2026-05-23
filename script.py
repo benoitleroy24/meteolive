@@ -21,7 +21,7 @@ creds = Credentials.from_service_account_info(google_secrets, scopes=scopes)
 gc = gspread.authorize(creds)
 
 # ==========================================
-# 3. BASE DE DONNÉES DES 72 PLAGES CONFIGURÉES
+# 3. BASE DE DONNÉES DES 71 PLAGES CONFIGURÉES
 # ==========================================
 DATA_PLAGES = [
     {"id_plage": 1, "nom_plage": "AGDE", "url": "https://meteofrance.com/meteo-plages/agde/3400351"},
@@ -97,24 +97,25 @@ DATA_PLAGES = [
     {"id_plage": 71, "nom_plage": "WISSANT", "url": "https://meteofrance.com/meteo-plages/wissant/6289951"}
 ]
 
+total_plages = len(DATA_PLAGES)
+
 # ==========================================
-# 4. INITIALISATION OU SYNCHRONISATION DU TABLEUR
+# 4. CHARGEMENT ET VÉRIFICATION DU TABLEUR
 # ==========================================
 print("Connexion à Google Sheets...")
 wb = gc.open_by_key(SPREADSHEET_ID)
 try:
     output_sheet = wb.worksheet(NOM_ONGLET)
 except gspread.exceptions.WorksheetNotFound:
-    print(f"Création automatique de l'onglet '{NOM_ONGLET}'...")
     output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="200", cols="5")
 
 valeurs_existantes = output_sheet.get_all_values()
 
-# Si la feuille est vide ou incomplète, on l'initialise avec l'ensemble des 72 plages
+# Si la feuille n'est pas initialisée, on crée la structure de base
 if len(valeurs_existantes) < 2:
-    print("Initialisation complète de la structure de la feuille...")
+    print("Initialisation du tableau de base...")
     lignes_initiales = [
-        ["Dernière mise à jour : Initialisation en cours..."],
+        ["Dernière mise à jour générale : En cours"],
         ["ID_PLAGE", "NOM_PLAGE", "SST_CELSIUS", "DATE_CONTRÔLE"]
     ]
     for p in DATA_PLAGES:
@@ -124,82 +125,72 @@ if len(valeurs_existantes) < 2:
 
 df_sheet = pd.DataFrame(valeurs_existantes[2:], columns=valeurs_existantes[1])
 
-# On s'assure que toutes nos plages définies sont présentes dans la feuille
-for p in DATA_PLAGES:
-    if p["nom_plage"] not in df_sheet["NOM_PLAGE"].values:
-        nouvelle_ligne = pd.DataFrame([{"ID_PLAGE": str(p["id_plage"]), "NOM_PLAGE": p["nom_plage"], "SST_CELSIUS": "En attente", "DATE_CONTRÔLE": "Jamais"}])
-        df_sheet = pd.concat([df_sheet, nouvelle_ligne], ignore_index=True)
+# ==========================================
+# 5. RECHÈRCHE DU DERNIER BLOC ET CALCUL DU PROCHAIN
+# ==========================================
+# On calcule la date d'aujourd'hui (sans l'heure) pour marquer nos repères de rotation
+maintenant = datetime.now(timezone(timedelta(hours=2)))
+aujourd_hui = maintenant.strftime("%d/%m/%Y")
+date_complete = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
+
+# On cherche l'index de la première ligne qui n'a pas encore été mise à jour aujourd'hui
+indices_non_faits = df_sheet[~df_sheet["DATE_CONTRÔLE"].str.contains(aujourd_hui, na=False)].index.tolist()
+
+# Si toutes les lignes ont déjà été faites aujourd'hui, on réinitialise tout pour refaire un tour complet
+if not indices_non_faits:
+    print("Toutes les plages ont été mises à jour aujourd'hui ! Redémarrage du roulement depuis la ligne 1...")
+    indices_a_traiter = list(range(0, min(10, total_plages)))
+else:
+    # Sinon, on prend tout simplement les 10 premières lignes qui attendent leur tour
+    indices_a_traiter = indices_non_faits[:10]
+
+print(f"Bloc sélectionné pour ce tour (indices de lignes) : {indices_a_traiter}")
 
 # ==========================================
-# 5. SÉLECTION DU BLOC DE 10 PLAGES (LES MOINS RÉCENTES)
-# ==========================================
-df_sheet['index_tri'] = range(len(df_sheet))
-plages_a_controler = df_sheet.sort_values(by=["DATE_CONTRÔLE", "index_tri"]).head(10)
-indices_a_traiter = plages_a_controler['index_tri'].tolist()
-
-print(f"Indices sélectionnés pour ce tour : {indices_a_traiter}")
-
-# ==========================================
-# 6. SCRAPING PAR NAVIGATEUR POUR LE BLOC SÉLECTIONNÉ
+# 6. SCRAPING PAR NAVIGATEUR POUR LE BLOC UNIQUE
 # ==========================================
 print("Ouverture du navigateur invisible...")
-maintenant = datetime.now(timezone(timedelta(hours=2)))
-date_du_jour = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
-
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
     
     for idx in indices_a_traiter:
-        nom_cible = df_sheet.loc[idx, "NOM_PLAGE"]
-        plage_config = next((item for item in DATA_PLAGES if item["nom_plage"] == nom_cible), None)
+        plage_config = DATA_PLAGES[idx]
+        print(f"Analyse en direct de : {plage_config['nom_plage']} (Ligne {idx + 3})...")
         
-        if plage_config:
-            print(f"Analyse en direct de : {nom_cible}...")
-            try:
-                page.goto(plage_config["url"], timeout=25000)
-                
-                # Gestion des cas particuliers (URLs météo classique et non plage, comme Bray-Dunes)
-                if "previsions-meteo-france" in plage_config["url"]:
-                    # Sur les pages météo classiques, la température de la mer n'est pas toujours disponible de la même façon
-                    # On met un contrôle générique par défaut
-                    df_sheet.loc[idx, "SST_CELSIUS"] = "Page Classique"
-                    df_sheet.loc[idx, "DATE_CONTRÔLE"] = date_du_jour
-                    print(f"-> Page météo classique (pas d'encadré plage standard)")
-                    continue
+        try:
+            page.goto(plage_config["url"], timeout=25000)
+            
+            if "previsions-meteo-france" in plage_config["url"]:
+                df_sheet.loc[idx, "SST_CELSIUS"] = "Page Classique"
+                df_sheet.loc[idx, "DATE_CONTRÔLE"] = date_complete
+                continue
 
-                selecteur = "li.t_sea > strong"
-                page.wait_for_selector(selecteur, timeout=8000)
-                
-                temp_text = page.locator(selecteur).inner_text()
-                if temp_text:
-                    sst_val = temp_text.replace("°", "").strip()
-                    df_sheet.loc[idx, "SST_CELSIUS"] = sst_val
-                    df_sheet.loc[idx, "DATE_CONTRÔLE"] = date_du_jour
-                    print(f"-> Trouvé : {sst_val}°C")
-            except Exception as e:
-                print(f"-> Indisponible à ce tour pour {nom_cible} (Vérifier si les données mer sont affichées)")
-                df_sheet.loc[idx, "DATE_CONTRÔLE"] = date_du_jour + " (Échec)"
-        else:
-            df_sheet.loc[idx, "DATE_CONTRÔLE"] = "URL Introuvable"
+            selecteur = "li.t_sea > strong"
+            page.wait_for_selector(selecteur, timeout=8000)
+            
+            temp_text = page.locator(selecteur).inner_text()
+            if temp_text:
+                sst_val = temp_text.replace("°", "").strip()
+                df_sheet.loc[idx, "SST_CELSIUS"] = sst_val
+                df_sheet.loc[idx, "DATE_CONTRÔLE"] = date_complete
+                print(f"-> Trouvé : {sst_val}°C")
+        except Exception as e:
+            print(f"-> Indisponible pour {plage_config['nom_plage']} à ce passage")
+            df_sheet.loc[idx, "DATE_CONTRÔLE"] = date_complete + " (Échec)"
 
     browser.close()
 
-df_sheet = df_sheet.drop(columns=['index_tri'])
-
 # ==========================================
-# 7. RÉÉCRITURE ET SAUVEGARDE DANS SHEETS
+# 7. ENREGISTREMENT ET RÉÉCRITURE DANS SHEETS
 # ==========================================
 print("Sauvegarde des modifications dans Google Sheets...")
 
-phrase_mise_a_jour = [f"Suivi glissant Météo France - Dernier passage bloc : le {date_du_jour}"]
+phrase_mise_a_jour = [f"Suivi glissant Météo France - Dernier passage bloc : le {date_complete}"]
 en_tetes = ["ID_PLAGE", "NOM_PLAGE", "SST_CELSIUS", "DATE_CONTRÔLE"]
 
-# On réorganise proprement selon nos colonnes
-df_sheet = df_sheet[en_tetes]
-lignes_donnees = df_sheet.values.tolist()
-
+lignes_donnees = df_sheet[en_tetes].values.tolist()
 toutes_les_lignes = [phrase_mise_a_jour] + [en_tetes] + lignes_donnees
 
 output_sheet.update(values=toutes_les_lignes, range_name="A1")
-print("✨ Google Sheet mis à jour avec succès !")
+print("✨ Google Sheet mis à jour. Le bloc suivant passera automatiquement à la prochaine heure !")
