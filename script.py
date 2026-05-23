@@ -200,6 +200,7 @@ for _, row in plages.iterrows():
     })
 
 result_df = pd.DataFrame(results)
+
 # ==========================================
 # 6. ENVOI ET MISE EN FORME DANS GOOGLE SHEETS
 # ==========================================
@@ -212,24 +213,22 @@ except gspread.exceptions.WorksheetNotFound:
     print(f"L'onglet '{NOM_ONGLET}' n'existe pas. Création automatique...")
     output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="1000", cols="10")
 
-# Nettoyage complet avant l'envoi
+# 1. Nettoyage complet de l'onglet avant l'écriture
 output_sheet.clear()
 
-# Conversion en texte CSV brut
-csv_pure_text = result_df.to_csv(index=False)
-
-# LA CORRECTION : C'est le client 'gc' qui importe le CSV en lui donnant l'ID du classeur
-gc.import_csv(SPREADSHEET_ID, csv_pure_text)
-
-# Récupération de l'onglet fraîchement importé pour ajouter la ligne supérieure
-output_sheet = wb.worksheet(NOM_ONGLET)
-output_sheet.insert_row([], index=1)
-
-# Calcul et insertion de la date en A1
+# 2. Préparation de la phrase de date pour la cellule A1
 maintenant = datetime.now(timezone(timedelta(hours=2))) # Paris GMT+2
 date_formatee = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
-phrase_import = f"Dernière mise à jour des données : le {date_formatee}"
+phrase_import = [f"Dernière mise à jour des données : le {date_formatee}"]
 
-output_sheet.update(values=[[phrase_import]], range_name="A1")
+# 3. Préparation du tableau (En-têtes + Lignes de données)
+en_tetes = result_df.columns.values.tolist()
+lignes_donnees = result_df.values.tolist()
 
-print(f"✨ L'onglet '{NOM_ONGLET}' a été mis à jour avec brio !")
+# 4. Assemblage final : Ligne 1 (Date), Ligne 2 (En-têtes), Lignes suivantes (Plages)
+toutes_les_lignes = [phrase_import] + [en_tetes] + lignes_donnees
+
+# 5. Envoi propre et unifié en une seule fois (Zéro risque d'erreur 500)
+output_sheet.update(values=toutes_les_lignes, range_name="A1")
+
+print(f"✨ L'onglet '{NOM_ONGLET}' a été mis à jour avec brio et l'heure est gravée en A1 !")
