@@ -190,7 +190,7 @@ with sync_playwright() as p:
                 print(f"  -> Température Mer : {val_sst}°C")
 
             # --- Extraction 2 : Indice UV (Votre sélecteur ciblé) ---
-            sel_uv = "#atmogramme_slider > div > ul > li.weather_details > div > ul > li.indice_uv > strong"
+            sel_uv = "li.indice_uv"
             # On vérifie si l'élément UV est bien affiché à l'écran (Météo France le masque parfois la nuit ou en hiver)
             if page.locator(sel_uv).count() > 0:
                 text_uv = page.locator(sel_uv).inner_text()
