@@ -1,6 +1,9 @@
+# ==========================================
+# 1. IMPORTS
+# ==========================================
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import urllib.request
 import numpy as np
 import pandas as pd
@@ -9,7 +12,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # ==========================================
-# 1. CONFIGURATION (À CONFIGURER AVEC VOS INFOS)
+# 2. CONFIGURATION (À CONFIGURER AVEC VOS INFOS)
 # ==========================================
 # Mettez ici l'ID de votre classeur (présent dans l'URL de votre Google Sheet)
 SPREADSHEET_ID = "1PJV98b4GkmHZsMF7uo9_eBUQG25JGaEdNJq0DvD9Z_4"
@@ -17,7 +20,7 @@ SPREADSHEET_ID = "1PJV98b4GkmHZsMF7uo9_eBUQG25JGaEdNJq0DvD9Z_4"
 NOM_ONGLET = "Tempé plages"
 
 # Récupération automatique de la clé d'accès Google stockée dans les secrets GitHub
-google_secrets = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+google_secrets = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_KEY"])
 
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -27,7 +30,7 @@ creds = Credentials.from_service_account_info(google_secrets, scopes=scopes)
 gc = gspread.authorize(creds)
 
 # ==========================================
-# 2. CALCUL DYNAMIQUE DE LA DATE ET DE L'URL
+# 3. CALCUL DYNAMIQUE DE LA DATE ET DE L'URL
 # ==========================================
 hier = datetime.now() - timedelta(days=1)
 annee = hier.strftime("%Y")
@@ -41,7 +44,7 @@ URL_FICHIER = base_url + nom_fichier
 LOCAL_NC = "sst_du_jour.nc"
 
 # ==========================================
-# 3. BASE DE DONNÉES DES 85 PLAGES
+# 4. BASE DE DONNÉES DES 85 PLAGES
 # ==========================================
 DATA_PLAGES = [
     {"id_plage": 39, "nom_plage": "AGDE", "situation": "GOLFE DU LION", "lat": 43.30829, "lon": 3.476137},
@@ -134,7 +137,7 @@ DATA_PLAGES = [
 plages = pd.DataFrame(DATA_PLAGES)
 
 # ==========================================
-# 4. TÉLÉCHARGEMENT ET RECHERCHE DE LA TEMPÉRATURE
+# 5. TÉLÉCHARGEMENT ET RECHERCHE DE LA TEMPÉRATURE
 # ==========================================
 print(f"Tentative de téléchargement : {URL_FICHIER}")
 try:
@@ -158,7 +161,7 @@ for _, row in plages.iterrows():
     lat_plage, lon_plage = row["lat"], row["lon"]
     sst_k, distance_km = np.nan, np.nan
     
-    # Étape A : On tente d'interpole directement sur le point GPS
+    # Tentative d'interpolation directe sur la plage
     try:
         interpolated_point = ds["analysed_sst"].interp(lat=lat_plage, lon=lon_plage, method="linear")
         val = interpolated_point.values.item()
@@ -167,18 +170,15 @@ for _, row in plages.iterrows():
     except:
         pass
         
-    # Étape B : Si le point précis est "sur la terre" (vide), on cherche l'eau tout autour
+    # Recherche élargie en mer si le point terrestre est vide
     if np.isnan(sst_k):
         try:
-            # On élargit la zone de recherche à un carré de 0.4 degré autour de la plage
             lat_min, lat_max = sorted([lat_plage - 0.2, lat_plage + 0.2])
             lon_min, lon_max = sorted([lon_plage - 0.2, lon_plage + 0.2])
             
-            # On extrait cette zone marine
             subset = ds["analysed_sst"].sel(lat=slice(lat_min, lat_max), lon=slice(lon_min, lon_max))
             local_df = subset.to_dataframe().reset_index().dropna()
             
-            # Si on trouve des pixels d'eau dans cette zone, on prend le plus proche de la plage
             if not local_df.empty:
                 local_df["dist"] = local_df.apply(lambda r: haversine_distance(lat_plage, lon_plage, r["lat"], r["lon"]), axis=1)
                 closest_row = local_df.loc[local_df["dist"].idxmin()]
@@ -187,7 +187,6 @@ for _, row in plages.iterrows():
         except:
             pass
     
-    # Conversion du Kelvin en Celsius (°C)
     sst_c = round(sst_k - 273.15, 1) if not np.isnan(sst_k) else "Non disponible"
     
     results.append({
@@ -203,7 +202,7 @@ for _, row in plages.iterrows():
 result_df = pd.DataFrame(results)
 
 # ==========================================
-# 5. ENVOI DIRECT DANS L'ONGLET GOOGLE SHEETS
+# 6. ENVOI ET MISE EN FORME DANS GOOGLE SHEETS
 # ==========================================
 print(f"Connexion à Google Sheets (Classeur ID: {SPREADSHEET_ID})...")
 wb = gc.open_by_key(SPREADSHEET_ID)
@@ -214,9 +213,17 @@ except gspread.exceptions.WorksheetNotFound:
     print(f"L'onglet '{NOM_ONGLET}' n'existe pas. Création automatique...")
     output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="1000", cols="10")
 
-# Nettoyage de l'onglet et injection des données
+# Nettoyage et importation découpée en colonnes
 output_sheet.clear()
-data_to_write = [result_df.columns.values.tolist()] + result_df.values.tolist()
-output_sheet.update(values=data_to_write, range_name="A1")
+csv_pure_text = result_df.to_csv(index=False)
+wb.import_csv(output_sheet.id, csv_pure_text)
 
-print(f"✨ L'onglet '{NOM_ONGLET}' a été mis à jour directement avec succès !")
+# Insertion de la ligne de date tout en haut (A1)
+output_sheet.insert_row([], index=1)
+maintenant = datetime.now(timezone(timedelta(hours=2))) # Fuseau horaire Paris Europe (GMT+2)
+date_formatee = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
+phrase_import = f"Dernière mise à jour des données : le {date_formatee}"
+
+output_sheet.update(values=[[phrase_import]], range_name="A1")
+
+print(f"✨ L'onglet '{NOM_ONGLET}' a été mis à jour avec brio !")
