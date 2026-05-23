@@ -12,9 +12,9 @@ from google.oauth2.service_account import Credentials
 # 1. CONFIGURATION (À CONFIGURER AVEC VOS INFOS)
 # ==========================================
 # Mettez ici l'ID de votre classeur (présent dans l'URL de votre Google Sheet)
-SPREADSHEET_ID = "VOTRE_ID_REEL_DE_GOOGLE_SHEET"
+SPREADSHEET_ID = "1PJV98b4GkmHZsMF7uo9_eBUQG25JGaEdNJq0DvD9Z_4"
 # Mettez ici le nom exact de l'onglet cible dans votre classeur
-NOM_ONGLET = "Données SST"
+NOM_ONGLET = "Tempé plages"
 
 # Récupération automatique de la clé d'accès Google stockée dans les secrets GitHub
 google_secrets = json.loads(os.environ["GOOGLE_CREDENTIALS"])
