@@ -126,25 +126,34 @@ if len(valeurs_existantes) < 2:
 df_sheet = pd.DataFrame(valeurs_existantes[2:], columns=valeurs_existantes[1])
 
 # ==========================================
-# 5. RECHÈRCHE DU DERNIER BLOC ET CALCUL DU PROCHAIN
+# 5. RECHERCHE DU DERNIER BLOC ET CALCUL DU PROCHAIN
 # ==========================================
-# On calcule la date d'aujourd'hui (sans l'heure) pour marquer nos repères de rotation
 maintenant = datetime.now(timezone(timedelta(hours=2)))
 aujourd_hui = maintenant.strftime("%d/%m/%Y")
 date_complete = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
 
-# On cherche l'index de la première ligne qui n'a pas encore été mise à jour aujourd'hui
+# On cherche d'abord les plages qui n'ont pas du tout la date d'aujourd'hui
 indices_non_faits = df_sheet[~df_sheet["DATE_CONTRÔLE"].str.contains(aujourd_hui, na=False)].index.tolist()
 
-# Si toutes les lignes ont déjà été faites aujourd'hui, on réinitialise tout pour refaire un tour complet
 if not indices_non_faits:
-    print("Toutes les plages ont été mises à jour aujourd'hui ! Redémarrage du roulement depuis la ligne 1...")
-    indices_a_traiter = list(range(0, min(10, total_plages)))
+    # Si tout a été fait aujourd'hui, on ne fait rien pour éviter de tourner en boucle durant l'heure UTC
+    print("✨ Toutes les plages ont déjà été actualisées avec succès pour aujourd'hui ! Fin du travail.")
+    indices_a_traiter = []
 else:
-    # Sinon, on prend tout simplement les 10 premières lignes qui attendent leur tour
+    # Sinon, on prend les 10 premières plages en retard
     indices_a_traiter = indices_non_faits[:10]
 
 print(f"Bloc sélectionné pour ce tour (indices de lignes) : {indices_a_traiter}")
+
+# SI LE BLOC EST VIDE (TOUT EST FAIT), ON ARRÊTE LE SCRIPT PROPREMENT ICI
+if not indices_a_traiter:
+    print("Rien à scrapper à ce tour-ci.")
+    # On met juste à jour la phrase de statut global sans toucher aux données
+    phrase_mise_a_jour = [f"Suivi glissant Météo France - Tableau 100% à jour pour le {aujourd_hui}"]
+    en_tetes = ["ID_PLAGE", "NOM_PLAGE", "SST_CELSIUS", "DATE_CONTRÔLE"]
+    toutes_les_lignes = [phrase_mise_a_jour] + [en_tetes] + df_sheet[en_tetes].values.tolist()
+    output_sheet.update(values=toutes_les_lignes, range_name="A1")
+    exit(0)
 
 # ==========================================
 # 6. SCRAPING PAR NAVIGATEUR POUR LE BLOC UNIQUE
