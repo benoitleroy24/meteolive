@@ -20,7 +20,7 @@ SPREADSHEET_ID = "1PJV98b4GkmHZsMF7uo9_eBUQG25JGaEdNJq0DvD9Z_4"
 NOM_ONGLET = "Tempé plages"
 
 # Récupération automatique de la clé d'accès Google stockée dans les secrets GitHub
-google_secrets = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_KEY"])
+google_secrets = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
