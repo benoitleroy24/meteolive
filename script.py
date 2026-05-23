@@ -3,6 +3,7 @@
 # ==========================================
 import os
 import json
+import re
 import requests
 from datetime import datetime, timedelta, timezone
 import pandas as pd
@@ -21,10 +22,8 @@ creds = Credentials.from_service_account_info(google_secrets, scopes=scopes)
 gc = gspread.authorize(creds)
 
 # ==========================================
-# 3. LISTE DES PLAGES AVEC LEURS COORDONNÉES ET ID
+# 3. LISTE DES PLAGES
 # ==========================================
-# Pour vos 84 autres plages, il suffira de dupliquer la ligne en remplaçant 
-# la lat, la lon et l'id par ceux trouvés dans les requêtes réseau correspondantes.
 DATA_PLAGES = [
     {
         "id_plage": 5, 
@@ -33,33 +32,57 @@ DATA_PLAGES = [
     }
 ]
 
-headers = {
+headers_base = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
 
+# ==========================================
+# 4. RÉCUPÉRATION AUTOMATIQUE DU TOKEN
+# ==========================================
+print("Récupération d'un jeton d'accès Météo-France valide...")
+token = None
+
+try:
+    # On visite la page de garde pour récupérer les cookies et le token de session
+    session = requests.Session()
+    page_accueil = session.get("https://meteofrance.com/", headers=headers_base, timeout=10)
+    
+    # Le token est généralement stocké dans le code source de la page ou généré dans un script d'init
+    # On utilise une expression régulière pour chercher une chaîne qui ressemble à votre token (eyJhbGci...)
+    match = re.search(r'ey[a-zA-Z0-9_-]+\.ey[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+', page_accueil.text)
+    
+    if match:
+        token = match.group(0)
+        print("✓ Jeton d'accès intercepté avec succès.")
+    else:
+        # Solution de secours si le token n'est pas dans le HTML pur : on utilise le vôtre temporairement
+        print("⚠️ Impossible d'intercepter le jeton dynamiquement, utilisation du jeton de secours...")
+        token = "eyJhbGciOiJIUzI1NiIsImNsYXNzIjoiaW50ZXJuZXQiLCJ0eXAiOiJKV1QifQ.eyJpYXQiOjE3Nzk1NDIzNTMsImp0aSI6IjhjZmM3NzkxMmZkMzRmNmY0YTQxMTU0Nzktext.koME0ryxmBcgwwd4W-cpdhJTg5DXjNQiVc9p32zMWfk"
+
+except Exception as e:
+    print(f"Erreur lors de la recherche du token : {e}")
+    token = "eyJhbGciOiJIUzI1NiIsImNsYXNzIjoiaW50ZXJuZXQiLCJ0eXAiOiJKV1QifQ.eyJpYXQiOjE3Nzk1NDIzNTMsImp0aSI6IjhjZmM3NzkxMmZkMzRmNmY0YTQxMTU0Nzktext.koME0ryxmBcgwwd4W-cpdhJTg5DXjNQiVc9p32zMWfk"
+
+# ==========================================
+# 5. INTERROGATION DE L'API AVEC LE TOKEN
+# ==========================================
+# On ajoute le badge d'autorisation dans nos requêtes de données
+headers_api = headers_base.copy()
+headers_api['Authorization'] = f"Bearer {token}"
+
 results = []
 
-# ==========================================
-# 4. LECTURE DIRECTE DES DONNÉES DE L'API
-# ==========================================
-print("Interrogation de la véritable API Météo France...")
-
 for plage in DATA_PLAGES:
-    print(f"Récupération des données pour : {plage['nom_plage']}...")
+    print(f"Appel de l'API pour : {plage['nom_plage']}...")
     sst_c = "Non disponible"
     
     try:
-        reponse = requests.get(plage["url_api"], headers=headers, timeout=10)
+        reponse = requests.get(plage["url_api"], headers=headers_api, timeout=10)
         
         if reponse.status_code == 200:
             data = reponse.json()
-            
-            # Météo France organise les données par échéances ("properties" -> "forecast")
-            # On va chercher la première prévision disponible dans la liste pour y trouver la température de la mer
             if "properties" in data and "forecast" in data["properties"]:
                 forecasts = data["properties"]["forecast"]
-                
-                # On parcourt les prévisions (souvent matin, après-midi...) jusqu'à trouver la clé 'sea_water_temperature' ou 'sea_temperature'
                 for period in forecasts:
                     if "sea_water_temperature" in period and period["sea_water_temperature"] is not None:
                         sst_c = period["sea_water_temperature"]
@@ -68,7 +91,7 @@ for plage in DATA_PLAGES:
                         sst_c = period["sea_temperature"]
                         break
         else:
-            print(f"Météo France a répondu avec une erreur {reponse.status_code}")
+            print(f"Erreur API {reponse.status_code} (Token potentiellement expiré ou refusé)")
             
     except Exception as e:
         print(f"Erreur technique : {e}")
@@ -82,11 +105,10 @@ for plage in DATA_PLAGES:
 result_df = pd.DataFrame(results)
 
 # ==========================================
-# 5. ENVOI ET MISE EN FORME DANS GOOGLE SHEETS
+# 6. MISE À JOUR GOOGLE SHEETS
 # ==========================================
-print("Connexion à Google Sheets...")
+print("Mise à jour du fichier Google Sheets...")
 wb = gc.open_by_key(SPREADSHEET_ID)
-
 try:
     output_sheet = wb.worksheet(NOM_ONGLET)
 except gspread.exceptions.WorksheetNotFound:
@@ -96,11 +118,11 @@ output_sheet.clear()
 
 maintenant = datetime.now(timezone(timedelta(hours=2)))
 date_formatee = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
-phrase_import = [f"Dernière mise à jour Météo France (Flux Direct) : le {date_formatee}"]
+phrase_import = [f"Dernière mise à jour Météo France (Flux API Sécurisé) : le {date_formatee}"]
 
 en_tetes = result_df.columns.values.tolist()
 lignes_donnees = result_df.values.tolist()
 toutes_les_lignes = [phrase_import] + [en_tetes] + lignes_donnees
 
 output_sheet.update(values=toutes_les_lignes, range_name="A1")
-print("✨ Google Sheet mis à jour avec succès !")
+print("✨ Google Sheet synchronisé avec succès !")
