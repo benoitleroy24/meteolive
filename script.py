@@ -1,3 +1,6 @@
+# ==========================================
+# 1. IMPORTS
+# ==========================================
 import os
 import json
 import requests
@@ -8,56 +11,69 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # ==========================================
-# CONFIGURATION GOOGLE SHEETS
+# 2. CONFIGURATION (À CONFIGURER AVEC VOS INFOS)
 # ==========================================
+# Mettez ici l'ID de votre classeur (présent dans l'URL de votre Google Sheet)
 SPREADSHEET_ID = "1PJV98b4GkmHZsMF7uo9_eBUQG25JGaEdNJq0DvD9Z_4"
+# Mettez ici le nom exact de l'onglet cible dans votre classeur
 NOM_ONGLET = "Tempé plages"
 
-# Connexion Google (via votre secret GitHub)
+# Récupération automatique de la clé d'accès Google stockée dans les secrets GitHub
 google_secrets = json.loads(os.environ["GOOGLE_CREDENTIALS"])
-scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 creds = Credentials.from_service_account_info(google_secrets, scopes=scopes)
 gc = gspread.authorize(creds)
 
 # ==========================================
-# LISTE DES PLAGES AVEC LEURS URLS MÉTÉO FRANCE
+# 3. LISTE DES PLAGES AVEC LEURS URLS
 # ==========================================
-# Il suffira de lister vos plages avec leur lien direct comme ceci :
-LISTE_PLAGES = [
-    {"id_plage": 5, "nom_plage": "PERROS-GUIREC", "url": "https://meteofrance.com/meteo-plages/perros-guirec/2216851"},
-    # {"id_plage": 39, "nom_plage": "AGDE", "url": "L'URL DE LA PLAGE D'AGDE"},
-    # Vous pourrez lister vos 85 plages ici...
+# Vous pourrez rajouter vos 84 autres plages à la suite dans ce tableau
+DATA_PLAGES = [
+    {"id_plage": 5, "nom_plage": "PERROS-GUIREC", "url": "https://meteofrance.com/meteo-plages/perros-guirec/2216851"}
 ]
+
+# Un en-tête pour simuler un navigateur internet normal et éviter d'être bloqué par Météo France
+headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
 results = []
 
-# Un en-tête pour faire croire au site que le script est un navigateur normal (évite d'être bloqué)
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+# ==========================================
+# 4. SCRAPING CHIRURGICAL SUR MÉTÉO FRANCE
+# ==========================================
+print("Début de la récupération des données sur Météo France...")
 
-print("Début de la récupération sur Météo France...")
-
-for plage in LISTE_PLAGES:
-    print(f"Scraping de {plage['nom_plage']}...")
+for plage in DATA_PLAGES:
+    print(f"Extraction de la température pour : {plage['nom_plage']}...")
     sst_c = "Non disponible"
     
     try:
-        # Téléchargement du code de la page de la plage
-        reponse = requests.get(plage["url"], headers=headers, timeout=10)
+        # Téléchargement de la page web de la plage
+        reponse = requests.get(plage["url"], headers=headers, timeout=15)
         
         if reponse.status_code == 200:
-            # On demande à BeautifulSoup d'analyser le code HTML
+            # Analyse du code HTML de la page
             soup = BeautifulSoup(reponse.text, 'html.parser')
             
-            # --- ICI ON CHERCHE LE BOUT DE CODE ---
-            # Météo France met souvent ces infos dans des balises spécifiques (classes CSS)
-            # Par exemple, si la température est dans une zone qui contient "T° eau" :
-            element_eau = soup.find(text=lambda t: t and "T° eau" in t)
+            # Application de votre sélecteur CSS précis
+            element_mer = soup.select_one("#atmogramme_slider > div > ul > li.weather_details > div > ul > li.t_sea > strong")
             
-            if element_eau:
-                # On extrait juste le nombre (ex: de "T° eau :14°" on isole "14")
-                sst_c = element_eau.replace("T° eau :", "").replace("°", "").strip()
+            if element_mer:
+                # Extraction du texte et nettoyage pour enlever le symbole "°"
+                sst_c = element_mer.text.replace("°", "").strip()
+            else:
+                # Sécurité : si l'identifiant global bouge un jour, on teste juste la classe de fin
+                secours = soup.select_one("li.t_sea > strong")
+                if secours:
+                    sst_c = secours.text.replace("°", "").strip()
+        else:
+            print(f"Erreur HTTP {reponse.status_code} pour la plage {plage['nom_plage']}")
+            
     except Exception as e:
-        print(f"Erreur pour {plage['nom_plage']} : {e}")
+        print(f"Erreur technique lors du scraping de {plage['nom_plage']} : {e}")
         
     results.append({
         "ID_PLAGE": plage["id_plage"],
@@ -65,28 +81,37 @@ for plage in LISTE_PLAGES:
         "SST_CELSIUS": sst_c
     })
 
-# Transformation en tableau
+# Création du tableau de données final
 result_df = pd.DataFrame(results)
 
 # ==========================================
-# ENVOI VERS GOOGLE SHEETS
+# 5. ENVOI ET MISE EN FORME DANS GOOGLE SHEETS
 # ==========================================
+print(f"Connexion à Google Sheets (Classeur ID: {SPREADSHEET_ID})...")
 wb = gc.open_by_key(SPREADSHEET_ID)
+
 try:
     output_sheet = wb.worksheet(NOM_ONGLET)
 except gspread.exceptions.WorksheetNotFound:
+    print(f"L'onglet '{NOM_ONGLET}' n'existe pas. Création automatique...")
     output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="1000", cols="5")
 
+# 1. Nettoyage complet de l'onglet avant l'écriture
 output_sheet.clear()
 
-# Préparation de la ligne de date
+# 2. Préparation de la phrase de date pour la cellule A1 (Heure de Paris GMT+2 en été)
 maintenant = datetime.now(timezone(timedelta(hours=2)))
 date_formatee = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
 phrase_import = [f"Dernière mise à jour Météo France : le {date_formatee}"]
 
+# 3. Récupération des en-têtes et des lignes du tableau Python
 en_tetes = result_df.columns.values.tolist()
 lignes_donnees = result_df.values.tolist()
 
-# Envoi du bloc complet
-output_sheet.update(values=[phrase_import] + [en_tetes] + lignes_donnees, range_name="A1")
-print("✨ Google Sheet mis à jour avec les données de Météo France !")
+# 4. Assemblage final : Ligne 1 (Date), Ligne 2 (En-têtes), Lignes suivantes (Plages)
+toutes_les_lignes = [phrase_import] + [en_tetes] + lignes_donnees
+
+# 5. Envoi global vers Google Sheets
+output_sheet.update(values=toutes_les_lignes, range_name="A1")
+
+print(f"✨ L'onglet '{NOM_ONGLET}' a été mis à jour avec brio et l'heure est gravée en A1 !")
