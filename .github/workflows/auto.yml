@@ -1,14 +1,4 @@
-name: Calcul SST Quotidien
-
-on:
-  schedule:
-    - cron: '0 7 * * *'
-  workflow_dispatch: 
-
-jobs:
-  run-sst:
-    runs-on: ubuntu-latest
-    steps:
+steps:
       - name: Récupérer le code
         uses: actions/checkout@v4
 
@@ -17,11 +7,11 @@ jobs:
         with:
           python-version: '3.10'
 
+      # LA LIGNE CORRIGÉE (Ajout de beautifulsoup4 et requests)
       - name: Installer les bibliothèques
-        run: pip install numpy pandas xarray netcdf4 gspread google-auth
+        run: pip install numpy pandas xarray netcdf4 gspread google-auth beautifulsoup4 requests
 
       - name: Exécuter le script Python
         env:
-          # On transmet la clé JSON masquée au script Python
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
         run: python script.py
