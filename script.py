@@ -200,7 +200,6 @@ for _, row in plages.iterrows():
     })
 
 result_df = pd.DataFrame(results)
-
 # ==========================================
 # 6. ENVOI ET MISE EN FORME DANS GOOGLE SHEETS
 # ==========================================
@@ -213,14 +212,21 @@ except gspread.exceptions.WorksheetNotFound:
     print(f"L'onglet '{NOM_ONGLET}' n'existe pas. Création automatique...")
     output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="1000", cols="10")
 
-# Nettoyage et importation découpée en colonnes
+# Nettoyage complet avant l'envoi
 output_sheet.clear()
-csv_pure_text = result_df.to_csv(index=False)
-wb.import_csv(output_sheet.id, csv_pure_text)
 
-# Insertion de la ligne de date tout en haut (A1)
+# Conversion en texte CSV brut
+csv_pure_text = result_df.to_csv(index=False)
+
+# LA CORRECTION : C'est le client 'gc' qui importe le CSV en lui donnant l'ID du classeur
+gc.import_csv(SPREADSHEET_ID, csv_pure_text)
+
+# Récupération de l'onglet fraîchement importé pour ajouter la ligne supérieure
+output_sheet = wb.worksheet(NOM_ONGLET)
 output_sheet.insert_row([], index=1)
-maintenant = datetime.now(timezone(timedelta(hours=2))) # Fuseau horaire Paris Europe (GMT+2)
+
+# Calcul et insertion de la date en A1
+maintenant = datetime.now(timezone(timedelta(hours=2))) # Paris GMT+2
 date_formatee = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
 phrase_import = f"Dernière mise à jour des données : le {date_formatee}"
 
