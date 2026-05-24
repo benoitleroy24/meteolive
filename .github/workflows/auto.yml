@@ -45,6 +45,6 @@ jobs:
           password: ${{ secrets.MAIL_PASSWORD }}
           # Contenu du message
           subject: "Félicitations : Robot SST Météo-France OK !"
-          to: votre_adresse_email@gmail.com # L'adresse où vous voulez recevoir le mail
+          to: benoit.leroy24@gmail.com # L'adresse où vous voulez recevoir le mail
           from: "Robot GitHub Actions"
           body: "Le script s'est exécuté avec succès cette nuit. Les températures des 71 plages ont été entièrement rafraîchies dans votre Google Sheet."
