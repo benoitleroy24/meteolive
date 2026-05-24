@@ -5,7 +5,6 @@ import os
 import json
 from datetime import datetime, timedelta, timezone
 from playwright.sync_api import sync_playwright
-import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -21,9 +20,8 @@ creds = Credentials.from_service_account_info(google_secrets, scopes=scopes)
 gc = gspread.authorize(creds)
 
 # ==========================================
-# 3. BASE DE DONNÉES DES PLAGES CIBLÉES
+# 3. BASE DE DONNÉES DES 71 PLAGES
 # ==========================================
-# Le script va utiliser l'ordre exact de ce tableau pour travailler
 DATA_PLAGES = [
     {"id_plage": 1, "nom_plage": "AGDE", "url": "https://meteofrance.com/meteo-plages/agde/3400351"},
     {"id_plage": 2, "nom_plage": "AJACCIO", "url": "https://meteofrance.com/meteo-plages/ajaccio/2000451"},
@@ -101,108 +99,58 @@ DATA_PLAGES = [
     {"id_plage": 71, "nom_plage": "WISSANT", "url": "https://meteofrance.com/meteo-plages/wissant/6289951"}
 ]
 
-total_plages = len(DATA_PLAGES)
+en_tetes = ["ID_PLAGE", "NOM_PLAGE", "SST_CELSIUS", "DATE_CONTRÔLE"]
 
 # ==========================================
-# 4. LECTURE DU COMPTEUR E1 DANS LE TABLEUR
+# 4. SCRAPING GLOBAL EN BOUCLE SÉQUENTIELLE
 # ==========================================
-print("Connexion à Google Sheets...")
-wb = gc.open_by_key(SPREADSHEET_ID)
-output_sheet = wb.worksheet(NOM_ONGLET)
-
-# On récupère TOUTES les valeurs de la feuille pour travailler en mémoire
-valeurs_grille = output_sheet.get_all_values()
-
-# Lecture de la case E1 (Index 0, Colonne 4). Si vide ou non numérique, on commence à l'index 0
-try:
-    prochain_index_a_traiter = int(valeurs_grille[0][4])
-except Exception:
-    prochain_index_a_traiter = 0
-
-# Sécurité : Si le pointeur dépasse la taille de la liste, on boucle à 0
-if prochain_index_a_traiter >= total_plages:
-    print("Tour complet validé. Réinitialisation du pointeur à 0.")
-    prochain_index_a_traiter = 0
-
-# On détermine la tranche de plages à traiter (ex: 0 à 9, puis 10 à 19...)
-indices_du_bloc = list(range(prochain_index_a_traiter, min(prochain_index_a_traiter + 10, total_plages)))
-print(f"Pointeur E1 actuel : {prochain_index_a_traiter}. Plages analysées ce tour-ci : {indices_du_bloc}")
-
-# ==========================================
-# 5. SCRAPING PAR NAVIGATEUR POUR LE BLOC STRICT
-# ==========================================
-print("Ouverture du navigateur invisible...")
+print("Démarrage du navigateur invisible (Playwright)...")
 maintenant = datetime.now(timezone(timedelta(hours=2)))
 date_complete = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
 
-donnees_mises_a_jour = {}
+lignes_finales = []
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
     
-    for idx in indices_du_bloc:
-        plage = DATA_PLAGES[idx]
-        print(f"-> Extraction : {plage['nom_plage']}...")
-        
+    for idx, plage in enumerate(DATA_PLAGES):
+        print(f"[{idx+1}/{len(DATA_PLAGES)}] Analyse de {plage['nom_plage']}...")
         sst_val = "Indisponible"
-        uv_val = "0"
         
         try:
-            page.goto(plage["url"], timeout=25000)
+            page.goto(plage["url"], timeout=20000)
             
             if "previsions-meteo-france" not in plage["url"]:
-                # 1. Température de l'eau
+                # Extraction Température Mer uniquement
                 sel_sst = "li.t_sea > strong"
                 if page.locator(sel_sst).count() > 0:
                     sst_val = page.locator(sel_sst).inner_text().replace("°", "").strip()
-                
-                # 2. Indice UV
-                sel_uv = "#atmogramme_slider > div > ul > li.weather_details > div > ul > li.indice_uv > strong"
-                if page.locator(sel_uv).count() > 0:
-                    uv_val = page.locator(sel_uv).inner_text().strip()
             else:
                 sst_val = "Page Classique"
-                uv_val = "Page Classique"
                 
         except Exception:
-            date_complete += " (Échec)"
+            print(f"   -> Délai dépassé ou erreur pour {plage['nom_plage']}")
             
-        # On mémorise les résultats associés au NOM de la plage
-        donnees_mises_a_jour[plage["nom_plage"]] = {
-            "sst": sst_val,
-            "uv": uv_val,
-            "date": date_complete
-        }
+        lignes_finales.append([plage["id_plage"], plage["nom_plage"], sst_val, date_complete])
 
     browser.close()
 
 # ==========================================
-# 6. MISE À JOUR CIBLÉE DES CELLULES DANS GOOGLE SHEETS
+# 5. REMPLACEMENT ET ENVOI SUR GOOGLE SHEETS
 # ==========================================
-print("Application des nouvelles valeurs dans la grille globale...")
+print("Connexion à Google Sheets...")
+wb = gc.open_by_key(SPREADSHEET_ID)
+try:
+    output_sheet = wb.worksheet(NOM_ONGLET)
+except gspread.exceptions.WorksheetNotFound:
+    output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="200", cols="4")
 
-# On parcourt les lignes physiques de la feuille (la ligne 1=Titre, ligne 2=En-têtes, les données commencent ligne 3)
-for row_idx, row_data in enumerate(valeurs_grille[2:], start=3):
-    if len(row_data) > 1:
-        nom_plage_sheet = row_data[1].strip() # Colonne B (Nom de la plage)
-        
-        # Si cette plage fait partie de celles qu'on vient de scrapper, on injecte les valeurs
-        if nom_plage_sheet in donnees_mises_a_jour:
-            infos = donnees_mises_a_jour[nom_plage_sheet]
-            
-            # Mise à jour des cellules spécifiques de la ligne
-            output_sheet.update_cell(row_idx, 3, infos["sst"])   # Colonne C : Température
-            output_sheet.update_cell(row_idx, 4, infos["uv"])    # Colonne D : Indice UV
-            output_sheet.update_cell(row_idx, 5, infos["date"])  # Colonne E : Date contrôle
+print("Nettoyage et réécriture totale de la feuille (Structure originale)...")
+output_sheet.clear()
 
-# Calcul du prochain pointeur pour la session de dans 5 minutes
-prochain_pointeur = prochain_index_a_traiter + 10
-if prochain_pointeur >= total_plages:
-    prochain_pointeur = 0
+phrase_titre = [f"Suivi Général Météo France - Mise à jour globale du {date_complete}"]
+grille_a_pousser = [phrase_titre] + [en_tetes] + lignes_finales
 
-# Sauvegarde finale du bandeau supérieur et du précieux pointeur en cellule E1
-output_sheet.update_cell(1, 1, f"Suivi glissant Météo France - Dernier passage bloc : le {date_complete}")
-output_sheet.update_cell(1, 5, str(prochain_pointeur))
-
-print(f"✨ Bloc synchronisé. Prochain départ enregistré en E1 : Ligne {prochain_pointeur}")
+output_sheet.update(values=grille_a_pousser, range_name="A1")
+print("✨ Opération réussie ! Le tableau Google Sheet original a été entièrement synchronisé.")
