@@ -6,10 +6,10 @@ on:
     - cron: '14 2 * * *'
     
     # Deuxième passage : 18h44 du soir à Paris (16h44 UTC)
-    - cron: '23 16 * * *'
-
-    workflow_dispatch:
+    - cron: '44 16 * * *'
     
+  workflow_dispatch: # Permet toujours le lancement manuel au besoin
+
 jobs:
   run-sst:
     runs-on: ubuntu-latest
