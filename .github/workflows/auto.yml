@@ -2,10 +2,13 @@ name: Calcul SST Quotidien
 
 on:
   schedule:
-    # S'exécute automatiquement TOUS LES JOURS à 02:30 UTC
-    # (Soit précisément à 04h30 du matin, heure de Paris)
+    # Premier passage : 04h14 du matin à Paris (02h14 UTC)
     - cron: '14 2 * * *'
-  workflow_dispatch: # Vous permet de conserver le bouton manuel en journée au cas où
+    
+    # Deuxième passage : 18h44 du soir à Paris (16h44 UTC)
+    - cron: '23 16 * * *'
+    
+  workflow_dispatch: # Permet toujours le lancement manuel au besoin
 
 jobs:
   run-sst:
@@ -26,7 +29,7 @@ jobs:
           subject: "🤖 [Début] Le robot SST vient de se réveiller !"
           to: benoit.leroy24@gmail.com
           from: "Robot GitHub Actions"
-          body: "GitHub vient de lancer l'exécution automatique nocturne. Le scraping des 71 plages démarre."
+          body: "GitHub vient de lancer l'exécution automatique. Le scraping des 71 plages démarre."
 
       # --- 2. EXÉCUTION ---
       - name: Installer Python
