@@ -3,7 +3,7 @@ name: Calcul SST Quotidien
 on:
   schedule:
     # Déclenchement automatique de test à 11h00 UTC (soit 13h00 à Paris)
-    - cron: '0 11 * * *'
+    - cron: '55 10 * * *'
   workflow_dispatch:
 
 jobs:
