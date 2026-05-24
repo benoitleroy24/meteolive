@@ -21,8 +21,9 @@ creds = Credentials.from_service_account_info(google_secrets, scopes=scopes)
 gc = gspread.authorize(creds)
 
 # ==========================================
-# 3. BASE DE DONNÉES DES 71 PLAGES CONFIGURÉES
+# 3. BASE DE DONNÉES DES PLAGES CIBLÉES
 # ==========================================
+# Le script va utiliser l'ordre exact de ce tableau pour travailler
 DATA_PLAGES = [
     {"id_plage": 1, "nom_plage": "AGDE", "url": "https://meteofrance.com/meteo-plages/agde/3400351"},
     {"id_plage": 2, "nom_plage": "AJACCIO", "url": "https://meteofrance.com/meteo-plages/ajaccio/2000451"},
@@ -36,7 +37,7 @@ DATA_PLAGES = [
     {"id_plage": 10, "nom_plage": "BERCK-SUR-MER", "url": "https://meteofrance.com/meteo-plages/berck-sur-mer/6210851"},
     {"id_plage": 11, "nom_plage": "BIARRITZ", "url": "https://meteofrance.com/meteo-plages/biarritz-anglet/6412251"},
     {"id_plage": 12, "nom_plage": "BOULOGNE-SUR-MER", "url": "https://meteofrance.com/meteo-plages/boulogne-sur-mer/6216051"},
-    {"id_plage": 13, "nom_plage": "BRAY-DUNES", "url": "https://meteofrance.com/meteo-plages/calais/6219351"},
+    {"id_plage": 13, "nom_plage": "BRAY-DUNES", "url": "https://meteofrance.com/previsions-meteo-france/bray-dunes/59123"},
     {"id_plage": 14, "nom_plage": "BREST", "url": "https://meteofrance.com/meteo-plages/brest/2901951"},
     {"id_plage": 15, "nom_plage": "CABOURG", "url": "https://meteofrance.com/meteo-plages/cabourg/1411751"},
     {"id_plage": 16, "nom_plage": "CALVI", "url": "https://meteofrance.com/meteo-plages/calvi/2005051"},
@@ -51,15 +52,15 @@ DATA_PLAGES = [
     {"id_plage": 25, "nom_plage": "CROZON", "url": "https://meteofrance.com/meteo-plages/crozon-morgat/2904251"},
     {"id_plage": 26, "nom_plage": "DEAUVILLE", "url": "https://meteofrance.com/meteo-plages/deauville/1422051"},
     {"id_plage": 27, "nom_plage": "DIEPPE", "url": "https://meteofrance.com/meteo-plages/dieppe/7621751"},
-    {"id_plage": 28, "nom_plage": "DUNKERQUE", "url": "https://meteofrance.com/meteo-plages/calais/6219351"},
-    {"id_plage": 72, "nom_plage": "FÉCAMP", "url": "https://meteofrance.com/meteo-plages/etretat/7625451"},
+    {"id_plage": 28, "nom_plage": "DUNKERQUE", "url": "https://meteofrance.com/previsions-meteo-france/dunkerque/59140"},
+    {"id_plage": 72, "nom_plage": "FÉCAMP", "url": "https://meteofrance.com/meteo-plages/fecamp/7625911"},
     {"id_plage": 29, "nom_plage": "FORT-MAHON PLAGE", "url": "https://meteofrance.com/meteo-plages/fort-mahon/8033351"},
     {"id_plage": 30, "nom_plage": "FRéJUS", "url": "https://meteofrance.com/meteo-plages/frejus/8306151"},
     {"id_plage": 31, "nom_plage": "GRANVILLE", "url": "https://meteofrance.com/meteo-plages/granville/5021851"},
     {"id_plage": 32, "nom_plage": "GRUISSAN", "url": "https://meteofrance.com/meteo-plages/gruissan/1117051"},
     {"id_plage": 33, "nom_plage": "HENDAYE", "url": "https://meteofrance.com/meteo-plages/hendaye/6426051"},
     {"id_plage": 34, "nom_plage": "HYÈRES", "url": "https://meteofrance.com/meteo-plages/hyeres-les-palmiers/8306951"},
-    {"id_plage": 35, "nom_plage": "ILE D'OLÉRON", "url": "https://meteofrance.com/meteo-plages/saint-pierre-d-oleron/1738551"},
+    {"id_plage": 35, "nom_plage": "ILE D'OLÉRON", "url": "https://meteofrance.com/previsions-meteo-france/saint-pierre-d-oleron/17310"},
     {"id_plage": 36, "nom_plage": "L'ÎLE-ROUSSE", "url": "https://meteofrance.com/meteo-plages/l-ile-rousse/2013451"},
     {"id_plage": 37, "nom_plage": "LA BAULE", "url": "https://meteofrance.com/meteo-plages/la-baule-escoublac/4405551"},
     {"id_plage": 38, "nom_plage": "LA CIOTAT", "url": "https://meteofrance.com/meteo-plages/la-ciotat/1302851"},
@@ -76,17 +77,17 @@ DATA_PLAGES = [
     {"id_plage": 49, "nom_plage": "MENTON", "url": "https://meteofrance.com/meteo-plages/menton/0608351"},
     {"id_plage": 50, "nom_plage": "MERLIMONT", "url": "https://meteofrance.com/meteo-plages/merlimont/6257151"},
     {"id_plage": 51, "nom_plage": "MIMIZAN", "url": "https://meteofrance.com/meteo-plages/mimizan/4018451"},
-    {"id_plage": 73, "nom_plage": "NAUJAC-SUR-MER", "url": "https://meteofrance.com/meteo-plages/hourtin/3320351"},
+    {"id_plage": 73, "nom_plage": "NAUJAC-SUR-MER", "url": "https://meteofrance.com/meteo-plages/naujac-sur-mer/3330011"},
     {"id_plage": 52, "nom_plage": "NICE", "url": "https://meteofrance.com/meteo-plages/nice/0608851"},
     {"id_plage": 53, "nom_plage": "NOIRMOUTIER", "url": "https://meteofrance.com/meteo-plages/noirmoutier-en-l-ile/8516351"},
     {"id_plage": 54, "nom_plage": "PALAVAS-LES-FLOTS", "url": "https://meteofrance.com/meteo-plages/palavas-les-flots/3419251"},
     {"id_plage": 55, "nom_plage": "PERROS-GUIREC", "url": "https://meteofrance.com/meteo-plages/perros-guirec/2216851"},
-    {"id_plage": 56, "nom_plage": "PLOUDALMÉZEAU", "url": "https://meteofrance.com/meteo-plages/roscoff/2923951"},
+    {"id_plage": 56, "nom_plage": "PLOUDALMÉZEAU", "url": "https://meteofrance.com/previsions-meteo-france/ploudalmezeau/29830"},
     {"id_plage": 57, "nom_plage": "PORT-DE-BOUC", "url": "https://meteofrance.com/meteo-plages/port-de-bouc/1307751"},
     {"id_plage": 58, "nom_plage": "PORTO-VECCHIO", "url": "https://meteofrance.com/meteo-plages/porto-vecchio/2024751"},
     {"id_plage": 59, "nom_plage": "ROQUEBRUNE-CAP-MARTIN", "url": "https://meteofrance.com/meteo-plages/roquebrune-cap-martin/0610451"},
     {"id_plage": 60, "nom_plage": "ROYAN", "url": "https://meteofrance.com/meteo-plages/royan/1730651"},
-    {"id_plage": 74, "nom_plage": "SAINT-BRIEUC", "url": "https://meteofrance.com/meteo-plages/erquy/2205451"},
+    {"id_plage": 74, "nom_plage": "SAINT-BRIEUC", "url": "https://meteofrance.com/meteo-plages/saint-brieuc/2227811"},
     {"id_plage": 61, "nom_plage": "SAINT-JEAN-DE-LUZ", "url": "https://meteofrance.com/meteo-plages/saint-jean-de-luz/6448351"},
     {"id_plage": 62, "nom_plage": "SAINT-MALO", "url": "https://meteofrance.com/meteo-plages/saint-malo/3528851"},
     {"id_plage": 63, "nom_plage": "SAINT-TROPEZ", "url": "https://meteofrance.com/meteo-plages/saint-tropez/8311951"},
@@ -103,106 +104,105 @@ DATA_PLAGES = [
 total_plages = len(DATA_PLAGES)
 
 # ==========================================
-# 4. CHARGEMENT ET VÉRIFICATION DU TABLEUR
+# 4. LECTURE DU COMPTEUR E1 DANS LE TABLEUR
 # ==========================================
 print("Connexion à Google Sheets...")
 wb = gc.open_by_key(SPREADSHEET_ID)
+output_sheet = wb.worksheet(NOM_ONGLET)
+
+# On récupère TOUTES les valeurs de la feuille pour travailler en mémoire
+valeurs_grille = output_sheet.get_all_values()
+
+# Lecture de la case E1 (Index 0, Colonne 4). Si vide ou non numérique, on commence à l'index 0
 try:
-    output_sheet = wb.worksheet(NOM_ONGLET)
-except gspread.exceptions.WorksheetNotFound:
-    output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="200", cols="5")
+    prochain_index_a_traiter = int(valeurs_grille[0][4])
+except Exception:
+    prochain_index_a_traiter = 0
 
-valeurs_existantes = output_sheet.get_all_values()
+# Sécurité : Si le pointeur dépasse la taille de la liste, on boucle à 0
+if prochain_index_a_traiter >= total_plages:
+    print("Tour complet validé. Réinitialisation du pointeur à 0.")
+    prochain_index_a_traiter = 0
 
-# Si la feuille n'est pas initialisée, on crée la structure de base
-if len(valeurs_existantes) < 2:
-    print("Initialisation du tableau de base...")
-    lignes_initiales = [
-        ["Dernière mise à jour générale : En cours"],
-        ["ID_PLAGE", "NOM_PLAGE", "SST_CELSIUS", "DATE_CONTRÔLE"]
-    ]
-    for p in DATA_PLAGES:
-        lignes_initiales.append([p["id_plage"], p["nom_plage"], "En attente", "Jamais"])
-    output_sheet.update(values=lignes_initiales, range_name="A1")
-    valeurs_existantes = output_sheet.get_all_values()
-
-df_sheet = pd.DataFrame(valeurs_existantes[2:], columns=valeurs_existantes[1])
+# On détermine la tranche de plages à traiter (ex: 0 à 9, puis 10 à 19...)
+indices_du_bloc = list(range(prochain_index_a_traiter, min(prochain_index_a_traiter + 10, total_plages)))
+print(f"Pointeur E1 actuel : {prochain_index_a_traiter}. Plages analysées ce tour-ci : {indices_du_bloc}")
 
 # ==========================================
-# 5. RECHERCHE DU DERNIER BLOC ET CALCUL DU PROCHAIN
-# ==========================================
-maintenant = datetime.now(timezone(timedelta(hours=2)))
-aujourd_hui = maintenant.strftime("%d/%m/%Y")
-date_complete = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
-
-# On cherche d'abord les plages qui n'ont pas du tout la date d'aujourd'hui
-indices_non_faits = df_sheet[~df_sheet["DATE_CONTRÔLE"].str.contains(aujourd_hui, na=False)].index.tolist()
-
-if not indices_non_faits:
-    # Si tout a été fait aujourd'hui, on ne fait rien pour éviter de tourner en boucle durant l'heure UTC
-    print("✨ Toutes les plages ont déjà été actualisées avec succès pour aujourd'hui ! Fin du travail.")
-    indices_a_traiter = []
-else:
-    # Sinon, on prend les 10 premières plages en retard
-    indices_a_traiter = indices_non_faits[:10]
-
-print(f"Bloc sélectionné pour ce tour (indices de lignes) : {indices_a_traiter}")
-
-# SI LE BLOC EST VIDE (TOUT EST FAIT), ON ARRÊTE LE SCRIPT PROPREMENT ICI
-if not indices_a_traiter:
-    print("Rien à scrapper à ce tour-ci.")
-    # On met juste à jour la phrase de statut global sans toucher aux données
-    phrase_mise_a_jour = [f"Suivi glissant Météo France - Tableau 100% à jour pour le {aujourd_hui}"]
-    en_tetes = ["ID_PLAGE", "NOM_PLAGE", "SST_CELSIUS", "DATE_CONTRÔLE"]
-    toutes_les_lignes = [phrase_mise_a_jour] + [en_tetes] + df_sheet[en_tetes].values.tolist()
-    output_sheet.update(values=toutes_les_lignes, range_name="A1")
-    exit(0)
-
-# ==========================================
-# 6. SCRAPING PAR NAVIGATEUR POUR LE BLOC UNIQUE
+# 5. SCRAPING PAR NAVIGATEUR POUR LE BLOC STRICT
 # ==========================================
 print("Ouverture du navigateur invisible...")
+maintenant = datetime.now(timezone(timedelta(hours=2)))
+date_complete = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
+
+donnees_mises_a_jour = {}
+
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
     
-    for idx in indices_a_traiter:
-        plage_config = DATA_PLAGES[idx]
-        print(f"Analyse en direct de : {plage_config['nom_plage']} (Ligne {idx + 3})...")
+    for idx in indices_du_bloc:
+        plage = DATA_PLAGES[idx]
+        print(f"-> Extraction : {plage['nom_plage']}...")
+        
+        sst_val = "Indisponible"
+        uv_val = "0"
         
         try:
-            page.goto(plage_config["url"], timeout=25000)
+            page.goto(plage["url"], timeout=25000)
             
-            if "previsions-meteo-france" in plage_config["url"]:
-                df_sheet.loc[idx, "SST_CELSIUS"] = "Page Classique"
-                df_sheet.loc[idx, "DATE_CONTRÔLE"] = date_complete
-                continue
-
-            selecteur = "li.t_sea > strong"
-            page.wait_for_selector(selecteur, timeout=8000)
+            if "previsions-meteo-france" not in plage["url"]:
+                # 1. Température de l'eau
+                sel_sst = "li.t_sea > strong"
+                if page.locator(sel_sst).count() > 0:
+                    sst_val = page.locator(sel_sst).inner_text().replace("°", "").strip()
+                
+                # 2. Indice UV
+                sel_uv = "#atmogramme_slider > div > ul > li.weather_details > div > ul > li.indice_uv > strong"
+                if page.locator(sel_uv).count() > 0:
+                    uv_val = page.locator(sel_uv).inner_text().strip()
+            else:
+                sst_val = "Page Classique"
+                uv_val = "Page Classique"
+                
+        except Exception:
+            date_complete += " (Échec)"
             
-            temp_text = page.locator(selecteur).inner_text()
-            if temp_text:
-                sst_val = temp_text.replace("°", "").strip()
-                df_sheet.loc[idx, "SST_CELSIUS"] = sst_val
-                df_sheet.loc[idx, "DATE_CONTRÔLE"] = date_complete
-                print(f"-> Trouvé : {sst_val}°C")
-        except Exception as e:
-            print(f"-> Indisponible pour {plage_config['nom_plage']} à ce passage")
-            df_sheet.loc[idx, "DATE_CONTRÔLE"] = date_complete + " (Échec)"
+        # On mémorise les résultats associés au NOM de la plage
+        donnees_mises_a_jour[plage["nom_plage"]] = {
+            "sst": sst_val,
+            "uv": uv_val,
+            "date": date_complete
+        }
 
     browser.close()
 
 # ==========================================
-# 7. ENREGISTREMENT ET RÉÉCRITURE DANS SHEETS
+# 6. MISE À JOUR CIBLÉE DES CELLULES DANS GOOGLE SHEETS
 # ==========================================
-print("Sauvegarde des modifications dans Google Sheets...")
+print("Application des nouvelles valeurs dans la grille globale...")
 
-phrase_mise_a_jour = [f"Suivi glissant Météo France - Dernier passage bloc : le {date_complete}"]
-en_tetes = ["ID_PLAGE", "NOM_PLAGE", "SST_CELSIUS", "DATE_CONTRÔLE"]
+# On parcourt les lignes physiques de la feuille (la ligne 1=Titre, ligne 2=En-têtes, les données commencent ligne 3)
+for row_idx, row_data in enumerate(valeurs_grille[2:], start=3):
+    if len(row_data) > 1:
+        nom_plage_sheet = row_data[1].strip() # Colonne B (Nom de la plage)
+        
+        # Si cette plage fait partie de celles qu'on vient de scrapper, on injecte les valeurs
+        if nom_plage_sheet in donnees_mises_a_jour:
+            infos = donnees_mises_a_jour[nom_plage_sheet]
+            
+            # Mise à jour des cellules spécifiques de la ligne
+            output_sheet.update_cell(row_idx, 3, infos["sst"])   # Colonne C : Température
+            output_sheet.update_cell(row_idx, 4, infos["uv"])    # Colonne D : Indice UV
+            output_sheet.update_cell(row_idx, 5, infos["date"])  # Colonne E : Date contrôle
 
-lignes_donnees = df_sheet[en_tetes].values.tolist()
-toutes_les_lignes = [phrase_mise_a_jour] + [en_tetes] + lignes_donnees
+# Calcul du prochain pointeur pour la session de dans 5 minutes
+prochain_pointeur = prochain_index_a_traiter + 10
+if prochain_pointeur >= total_plages:
+    prochain_pointeur = 0
 
-output_sheet.update(values=toutes_les_lignes, range_name="A1")
-print("✨ Google Sheet mis à jour. Le bloc suivant passera automatiquement à la prochaine heure !")
+# Sauvegarde finale du bandeau supérieur et du précieux pointeur en cellule E1
+output_sheet.update_cell(1, 1, f"Suivi glissant Météo France - Dernier passage bloc : le {date_complete}")
+output_sheet.update_cell(1, 5, str(prochain_pointeur))
+
+print(f"✨ Bloc synchronisé. Prochain départ enregistré en E1 : Ligne {prochain_pointeur}")
