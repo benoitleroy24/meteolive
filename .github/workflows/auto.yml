@@ -2,9 +2,10 @@ name: Calcul SST Quotidien
 
 on:
   schedule:
-    # Déclenchement automatique de test à 11h00 UTC (soit 13h00 à Paris)
-    - cron: '55 10 * * *'
-  workflow_dispatch:
+    # S'exécute automatiquement TOUS LES JOURS à 02:30 UTC
+    # (Soit précisément à 04h30 du matin, heure de Paris)
+    - cron: '14 2 * * *'
+  workflow_dispatch: # Vous permet de conserver le bouton manuel en journée au cas où
 
 jobs:
   run-sst:
@@ -13,7 +14,7 @@ jobs:
       - name: Récupérer le code du dépôt
         uses: actions/checkout@v4
 
-      # --- 1. E-MAIL AU DÉMARRAGE REEL ---
+      # --- 1. E-MAIL AU DÉMARRAGE RÉEL ---
       - name: Envoyer un e-mail de démarrage
         uses: dawidd6/action-send-mail@v3
         with:
@@ -25,7 +26,7 @@ jobs:
           subject: "🤖 [Début] Le robot SST vient de se réveiller !"
           to: benoit.leroy24@gmail.com
           from: "Robot GitHub Actions"
-          body: "GitHub vient de lancer l'exécution automatique. Le scraping des 71 plages démarre."
+          body: "GitHub vient de lancer l'exécution automatique nocturne. Le scraping des 71 plages démarre."
 
       # --- 2. EXÉCUTION ---
       - name: Installer Python
