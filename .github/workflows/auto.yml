@@ -2,10 +2,9 @@ name: Calcul SST Quotidien
 
 on:
   schedule:
-    # S'exécute automatiquement TOUS LES JOURS à 10:00 UTC
-    # (Soit précisément à 12h00 du matin, heure de Paris)
+    # S'exécute automatiquement TOUS LES JOURS à 10:00 UTC (12h00 du matin à Paris)
     - cron: '0 10 * * *'
-  workflow_dispatch: # Vous permet de toujours pouvoir le lancer manuellement en journée
+  workflow_dispatch: # Permet de le lancer manuellement en journée
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -31,3 +30,21 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
         run: python script.py
+
+      # --- NOUVELLE ÉTAPE : ENVOI DE L'E-MAIL DE SUCCÈS ---
+      - name: Envoyer un e-mail de confirmation
+        if: success() # Cette ligne garantit que le mail part UNIQUEMENT si le script Python a réussi
+        uses: dawidd6/action-send-mail@v3
+        with:
+          # Configuration de votre serveur d'envoi (ici l'exemple pour Gmail)
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          # Vos identifiants cachés dans les Secrets GitHub
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          # Contenu du message
+          subject: "Félicitations : Robot SST Météo-France OK !"
+          to: votre_adresse_email@gmail.com # L'adresse où vous voulez recevoir le mail
+          from: "Robot GitHub Actions"
+          body: "Le script s'est exécuté avec succès cette nuit. Les températures des 71 plages ont été entièrement rafraîchies dans votre Google Sheet."
