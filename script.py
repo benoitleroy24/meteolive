@@ -86,7 +86,7 @@ DATA_PLAGES = [
     {"id_plage": 58, "nom_plage": "PORTO-VECCHIO", "url": "https://meteofrance.com/meteo-plages/porto-vecchio/2024751"},
     {"id_plage": 59, "nom_plage": "ROQUEBRUNE-CAP-MARTIN", "url": "https://meteofrance.com/meteo-plages/roquebrune-cap-martin/0610451"},
     {"id_plage": 60, "nom_plage": "ROYAN", "url": "https://meteofrance.com/meteo-plages/royan/1730651"},
-    {"id_plage": 74, "nom_plage": "SAINT-BRIEUC", "url": "https://meteofrance.com/meteo-plages/saint-brieuc/2227811"},
+    {"id_plage": 74, "nom_plage": "SAINT-BRIEUC", "url": "https://meteofrance.com/meteo-plages/erquy/2205451"},
     {"id_plage": 61, "nom_plage": "SAINT-JEAN-DE-LUZ", "url": "https://meteofrance.com/meteo-plages/saint-jean-de-luz/6448351"},
     {"id_plage": 62, "nom_plage": "SAINT-MALO", "url": "https://meteofrance.com/meteo-plages/saint-malo/3528851"},
     {"id_plage": 63, "nom_plage": "SAINT-TROPEZ", "url": "https://meteofrance.com/meteo-plages/saint-tropez/8311951"},
