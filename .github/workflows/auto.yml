@@ -2,8 +2,8 @@ name: Calcul SST Quotidien
 
 on:
   schedule:
-    # S'exécute automatiquement TOUS LES JOURS à 10:00 UTC (12h00 du matin à Paris)
-    - cron: '0 10 * * *'
+    # S'exécute automatiquement TOUS LES JOURS à 10:48 UTC (12h48 du matin à Paris)
+    - cron: '48 10 * * *'
   workflow_dispatch: # Permet de le lancer manuellement en journée
 
 env:
