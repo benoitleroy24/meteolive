@@ -2,12 +2,9 @@ name: Calcul SST Quotidien
 
 on:
   schedule:
-    # S'exécute automatiquement TOUS LES JOURS à 10:48 UTC (12h48 du matin à Paris)
-    - cron: '48 10 * * *'
-  workflow_dispatch: # Permet de le lancer manuellement en journée
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+    # Déclenchement automatique de test à 11h00 UTC (soit 13h00 à Paris)
+    - cron: '0 11 * * *'
+  workflow_dispatch:
 
 jobs:
   run-sst:
@@ -16,6 +13,21 @@ jobs:
       - name: Récupérer le code du dépôt
         uses: actions/checkout@v4
 
+      # --- 1. E-MAIL AU DÉMARRAGE REEL ---
+      - name: Envoyer un e-mail de démarrage
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "🤖 [Début] Le robot SST vient de se réveiller !"
+          to: benoit.leroy24@gmail.com
+          from: "Robot GitHub Actions"
+          body: "GitHub vient de lancer l'exécution automatique. Le scraping des 71 plages démarre."
+
+      # --- 2. EXÉCUTION ---
       - name: Installer Python
         uses: actions/setup-python@v5
         with:
@@ -31,20 +43,17 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
         run: python script.py
 
-      # --- NOUVELLE ÉTAPE : ENVOI DE L'E-MAIL DE SUCCÈS ---
+      # --- 3. E-MAIL DE FIN ---
       - name: Envoyer un e-mail de confirmation
-        if: success() # Cette ligne garantit que le mail part UNIQUEMENT si le script Python a réussi
+        if: success()
         uses: dawidd6/action-send-mail@v3
         with:
-          # Configuration de votre serveur d'envoi (ici l'exemple pour Gmail)
           server_address: smtp.gmail.com
           server_port: 465
           secure: true
-          # Vos identifiants cachés dans les Secrets GitHub
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          # Contenu du message
-          subject: "Félicitations : Robot SST Météo-France OK !"
-          to: benoit.leroy24@gmail.com # L'adresse où vous voulez recevoir le mail
+          subject: "✅ [Succès] Rapport Quotidien : Températures de la mer"
+          to: benoit.leroy24@gmail.com
           from: "Robot GitHub Actions"
-          body: "Le script s'est exécuté avec succès cette nuit. Les températures des 71 plages ont été entièrement rafraîchies dans votre Google Sheet."
+          file_body: rapport.txt
