@@ -3,8 +3,9 @@
 # ==========================================
 import os
 import json
+import asyncio
 from datetime import datetime, timedelta, timezone
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -102,55 +103,80 @@ DATA_PLAGES = [
 en_tetes = ["ID_PLAGE", "NOM_PLAGE", "SST_CELSIUS", "DATE_CONTRÔLE"]
 
 # ==========================================
-# 4. SCRAPING GLOBAL EN BOUCLE SÉQUENTIELLE
+# 4. FONCTION DE SCRAPING D'UNE PLAGE UNIQUE
 # ==========================================
-print("Démarrage du navigateur invisible (Playwright)...")
-maintenant = datetime.now(timezone(timedelta(hours=2)))
-date_complete = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
-
-lignes_finales = []
-
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)
-    page = browser.new_page()
+async def scraper_une_plage(context, plage, date_str):
+    print(f"Analyse de {plage['nom_plage']}...")
+    sst_val = "Indisponible"
     
-    for idx, plage in enumerate(DATA_PLAGES):
-        print(f"[{idx+1}/{len(DATA_PLAGES)}] Analyse de {plage['nom_plage']}...")
-        sst_val = "Indisponible"
+    # On isole les erreurs pour qu'une plage en panne ne bloque pas les autres
+    try:
+        page = await context.new_page()
+        await page.goto(plage["url"], timeout=30000)
         
-        try:
-            page.goto(plage["url"], timeout=20000)
+        if "previsions-meteo-france" not in plage["url"]:
+            sel_sst = "li.t_sea > strong"
+            # FORCE l'attente du sélecteur à l'écran (Maximum 8 secondes)
+            await page.wait_for_selector(sel_sst, timeout=8000)
             
-            if "previsions-meteo-france" not in plage["url"]:
-                # Extraction Température Mer uniquement
-                sel_sst = "li.t_sea > strong"
-                if page.locator(sel_sst).count() > 0:
-                    sst_val = page.locator(sel_sst).inner_text().replace("°", "").strip()
-            else:
-                sst_val = "Page Classique"
+            text_sst = await page.locator(sel_sst).inner_text()
+            if text_sst:
+                sst_val = text_sst.replace("°", "").strip()
+        else:
+            sst_val = "Page Classique"
+            
+        await page.close()
+    except Exception:
+        print(f"   -> Échec d'extraction (Timeout ou élément absent) pour {plage['nom_plage']}")
+        try: await page.close()
+        except: pass
+        
+    return [plage["id_plage"], plage["nom_plage"], sst_val, date_str]
+
+# ==========================================
+# 5. PILOTAGE ASYNC MULTI-ONGLETS
+# ==========================================
+async def main():
+    maintenant = datetime.now(timezone(timedelta(hours=2)))
+    date_complete = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
+    
+    print("Démarrage du navigateur Playwright (Mode Rapide Asynchrone)...")
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context()
+        
+        # On définit une limite de 5 requêtes simultanées pour ne pas surcharger Météo-France
+        semaphore = asyncio.Semaphore(5)
+        
+        async def executer_avec_limite(plage):
+            async with semaphore:
+                return await scraper_une_plage(context, plage, date_complete)
                 
-        except Exception:
-            print(f"   -> Délai dépassé ou erreur pour {plage['nom_plage']}")
-            
-        lignes_finales.append([plage["id_plage"], plage["nom_plage"], sst_val, date_complete])
+        # On lance toutes les tâches en parallèle
+        taches = [executer_avec_limite(plage) for plage in DATA_PLAGES]
+        lignes_finales = await asyncio.gather(*taches)
+        
+        await browser.close()
+        
+    # ==========================================
+    # 6. EXPÉDITION SUR GOOGLE SHEETS
+    # ==========================================
+    print("Connexion à l'API Google Sheets...")
+    wb = gc.open_by_key(SPREADSHEET_ID)
+    try:
+        output_sheet = wb.worksheet(NOM_ONGLET)
+    except gspread.exceptions.WorksheetNotFound:
+        output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="200", cols="4")
+        
+    print("Réécriture complète du tableau...")
+    output_sheet.clear()
+    
+    phrase_titre = [f"Suivi Général Météo France - Mise à jour globale du {date_complete}"]
+    grille_a_pousser = [phrase_titre] + [en_tetes] + lignes_finales
+    
+    output_sheet.update(values=grille_a_pousser, range_name="A1")
+    print("✨ Opération terminée avec succès ! Toutes les températures réelles sont restaurées.")
 
-    browser.close()
-
-# ==========================================
-# 5. REMPLACEMENT ET ENVOI SUR GOOGLE SHEETS
-# ==========================================
-print("Connexion à Google Sheets...")
-wb = gc.open_by_key(SPREADSHEET_ID)
-try:
-    output_sheet = wb.worksheet(NOM_ONGLET)
-except gspread.exceptions.WorksheetNotFound:
-    output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="200", cols="4")
-
-print("Nettoyage et réécriture totale de la feuille (Structure originale)...")
-output_sheet.clear()
-
-phrase_titre = [f"Suivi Général Météo France - Mise à jour globale du {date_complete}"]
-grille_a_pousser = [phrase_titre] + [en_tetes] + lignes_finales
-
-output_sheet.update(values=grille_a_pousser, range_name="A1")
-print("✨ Opération réussie ! Le tableau Google Sheet original a été entièrement synchronisé.")
+# Lancement du script
+if __name__ == "__main__":
+    asyncio.run(main())
