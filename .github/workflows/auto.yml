@@ -3,7 +3,7 @@ name: Calcul SST Quotidien
 on:
   schedule:
     # Premier passage : 04h14 du matin à Paris (02h14 UTC)
-    - cron: '14 2 * * *'
+    - cron: '45 13 * * *'
     
     # Deuxième passage : 20h44 du soir à Paris (18h44 UTC)
     - cron: '44 18 * * *'
