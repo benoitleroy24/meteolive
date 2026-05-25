@@ -2,13 +2,13 @@ name: Calcul SST Quotidien
 
 on:
   schedule:
-    # Premier passage : 04h14 du matin à Paris (02h14 UTC)
-    - cron: '45 13 * * *'
-    
-    # Deuxième passage : 20h44 du soir à Paris (18h44 UTC)
-    - cron: '44 18 * * *'
-    
-  workflow_dispatch: # Permet toujours le lancement manuel au besoin
+    # Déclenchements automatiques : 
+    # - Toutes les nuits à 04h14 de Paris (14 2)
+    # ET
+    # - Tous les soirs à 18h44 de Paris (44 16)
+    - cron: '14 2,16 * * *'   # <-- La virgule "2,16" regroupe les deux heures en UTC !
+
+  workflow_dispatch:
 
 jobs:
   run-sst:
