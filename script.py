@@ -15,13 +15,14 @@ from google.oauth2.service_account import Credentials
 SPREADSHEET_ID = "1PJV98b4GkmHZsMF7uo9_eBUQG25JGaEdNJq0DvD9Z_4"
 NOM_ONGLET = "Données Météo France"
 
+print("[INIT] Chargement des clés Google...")
 google_secrets = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(google_secrets, scopes=scopes)
 gc = gspread.authorize(creds)
 
 # ==========================================
-# 3. BASE DE DONNÉES DES 71 PLAGES (COMPLÈTE)
+# 3. BASE DE DONNÉES DES 71 PLAGES
 # ==========================================
 DATA_PLAGES = [
     {"id_plage": 1, "nom_plage": "AGDE", "url": "https://meteofrance.com/meteo-plages/agde/3400351"},
@@ -100,65 +101,62 @@ DATA_PLAGES = [
     {"id_plage": 71, "nom_plage": "WISSANT", "url": "https://meteofrance.com/meteo-plages/wissant/6289951"}
 ]
 
-# Structure finale avec les 2 colonnes UV insérées au bon endroit
 en_tetes = ["ID_PLAGE", "NOM_PLAGE", "SST_CELSIUS", "UV_AUJOURDHUI", "UV_DEMAIN", "DATE_CONTRÔLE"]
 
 # ==========================================
 # 4. FONCTION DE SCRAPING D'UNE PLAGE UNIQUE
 # ==========================================
 async def scraper_une_plage(context, plage, date_str):
-    print(f"Analyse de {plage['nom_plage']}...")
-    sst_val = "Indisponible"
-    uv_aujourdhui = "Indisponible"
-    uv_demain = "Indisponible"
+    print(f"[RUN] Début de l'analyse : {plage['nom_plage']}")
+    sst_val = "N/A"
+    uv_aujourdhui = "N/A"
+    uv_demain = "N/A"
+    page = None
     
     try:
         page = await context.new_page()
-        await page.goto(plage["url"], timeout=30000)
+        # waitUntil: "load" au lieu de "networkidle" pour aller BEAUCOUP plus vite et éviter les freezes
+        await page.goto(plage["url"], timeout=20000, wait_until="load")
         
-        if "previsions-meteo-france" not in plage["url"]:
-            # --- 1. Bloc Température de l'eau ---
-            sel_sst = "li.t_sea > strong"
-            try:
-                await page.wait_for_selector(sel_sst, timeout=6000)
-                text_sst = await page.locator(sel_sst).inner_text()
-                if text_sst:
-                    sst_val = text_sst.replace("°", "").strip()
-            except Exception:
-                sst_val = "N/A"
+        # --- 1. Bloc Température de l'eau ---
+        sel_sst = "li.t_sea > strong"
+        try:
+            await page.wait_for_selector(sel_sst, timeout=4000)
+            text_sst = await page.locator(sel_sst).inner_text()
+            if text_sst:
+                sst_val = text_sst.replace("°", "").strip()
+        except Exception:
+            sst_val = "N/A"
 
-            # Sélecteur de l'indice UV ciblé
-            sel_uv = "#atmogramme_slider > div > ul > li.weather_details > div > ul > li.indice_uv"
+        # --- 2. Bloc UV Aujourd'hui ---
+        sel_uv = "#atmogramme_slider > div > ul > li.weather_details > div > ul > li.indice_uv"
+        try:
+            await page.click('#msc_today', timeout=3000)
+            await asyncio.sleep(0.3)  # Petite pause asynchrone propre
+            await page.wait_for_selector(sel_uv, timeout=3000)
+            text_uv_today = await page.locator(sel_uv).inner_text()
+            if text_uv_today:
+                uv_aujourdhui = text_uv_today.replace("Indice", "").replace("UV", "").strip().split()[-1]
+        except Exception:
+            uv_aujourdhui = "N/A"
 
-            # --- 2. Bloc UV Aujourd'hui ---
-            try:
-                await page.click('#msc_today')
-                await page.wait_for_timeout(400) # Attente du slider
-                await page.wait_for_selector(sel_uv, timeout=4000)
-                text_uv_today = await page.locator(sel_uv).inner_text()
-                if text_uv_today:
-                    uv_aujourdhui = text_uv_today.replace("Indice", "").replace("UV", "").strip().split()[-1]
-            except Exception:
-                uv_aujourdhui = "N/A"
-
-            # --- 3. Bloc UV Demain ---
-            try:
-                await page.click('#msc_tomorrow')
-                await page.wait_for_timeout(400) # Attente de la rotation du slider
-                await page.wait_for_selector(sel_uv, timeout=4000)
-                text_uv_tomorrow = await page.locator(sel_uv).inner_text()
-                if text_uv_tomorrow:
-                    uv_demain = text_uv_tomorrow.replace("Indice", "").replace("UV", "").strip().split()[-1]
-            except Exception:
-                uv_demain = "N/A"
-        else:
-            sst_val = "Page Classique"
+        # --- 3. Bloc UV Demain ---
+        try:
+            await page.click('#msc_tomorrow', timeout=3000)
+            await asyncio.sleep(0.3)
+            await page.wait_for_selector(sel_uv, timeout=3000)
+            text_uv_tomorrow = await page.locator(sel_uv).inner_text()
+            if text_uv_tomorrow:
+                uv_demain = text_uv_tomorrow.replace("Indice", "").replace("UV", "").strip().split()[-1]
+        except Exception:
+            uv_demain = "N/A"
             
-        await page.close()
-    except Exception:
-        print(f"    -> Échec global d'extraction pour {plage['nom_plage']}")
-        try: await page.close()
-        except: pass
+    except Exception as e:
+        print(f"[ERREUR] Échec de chargement de la page pour {plage['nom_plage']}: {e}")
+    finally:
+        if page:
+            await page.close()
+        print(f"[OK] Terminé : {plage['nom_plage']} (Eau: {sst_val} | UV J: {uv_aujourdhui} | UV J+1: {uv_demain})")
         
     return [plage["id_plage"], plage["nom_plage"], sst_val, uv_aujourdhui, uv_demain, date_str]
 
@@ -169,24 +167,25 @@ async def main():
     maintenant = datetime.now(timezone(timedelta(hours=2)))
     date_complete = maintenant.strftime("%d/%m/%Y à %H:%M:%S")
     
-    print("Démarrage du navigateur Playwright (Sémaphore Actif)...")
+    print("[START] Initialisation du navigateur Playwright...")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         
-        # Conserve la limite de 5 connexions parallèles pour la stabilité
-        semaphore = asyncio.Semaphore(5)
+        # Sémaphore à 4 pour être plus discret et éviter d'être bloqué par Météo France
+        semaphore = asyncio.Semaphore(4)
         
         async def executer_avec_limite(plage):
             async with semaphore:
                 return await scraper_une_plage(context, plage, date_complete)
                 
+        print(f"[SCRAPE] Lancement de l'analyse parallèle pour les {len(DATA_PLAGES)} plages...")
         taches = [executer_avec_limite(plage) for plage in DATA_PLAGES]
         lignes_finales = await asyncio.gather(*taches)
         
         await browser.close()
         
-    # Génération du fichier d'envoi pour le rapport texte (GitHub Action)
+    print("[FILE] Écriture du fichier rapport.txt...")
     with open("rapport.txt", "w", encoding="utf-8") as f:
         f.write("\t".join(en_tetes) + "\n")
         for ligne in lignes_finales:
@@ -195,22 +194,21 @@ async def main():
     # ==========================================
     # 6. EXPÉDITION SUR GOOGLE SHEETS
     # ==========================================
-    print("Connexion à l'API Google Sheets...")
+    print("[SHEETS] Connexion à Google Sheets...")
     wb = gc.open_by_key(SPREADSHEET_ID)
     try:
         output_sheet = wb.worksheet(NOM_ONGLET)
     except gspread.exceptions.WorksheetNotFound:
         output_sheet = wb.add_worksheet(title=NOM_ONGLET, rows="200", cols="6")
         
-    print("Réécriture complète du tableau...")
+    print("[SHEETS] Nettoyage et réécriture complète...")
     output_sheet.clear()
     
     phrase_titre = [f"Suivi Général Météo France - Mise à jour globale du {date_complete}"]
     grille_a_pousser = [phrase_titre] + [en_tetes] + lignes_finales
     
-    # CORRECTION : Utilisation de la nouvelle syntaxe gspread pour éviter l'erreur Response [200]
     output_sheet.update("A1", grille_a_pousser)
-    print("✨ Opération terminée avec succès ! Le tableur et le rapport texte sont générés.")
+    print("✨ [SUCCESS] Script exécuté à 100% avec succès !")
 
 if __name__ == "__main__":
     asyncio.run(main())
