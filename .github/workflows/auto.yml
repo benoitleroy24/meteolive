@@ -6,7 +6,7 @@ on:
     # - Toutes les nuits à 04h14 de Paris (14 2)
     # ET
     # - Tous les soirs à 18h44 de Paris (44 16)
-    - cron: '14 2,16 * * *'   # <-- La virgule "2,16" regroupe les deux heures en UTC !
+    - cron: '14 2,14 * * *'   # <-- La virgule "2,16" regroupe les deux heures en UTC !
 
   workflow_dispatch:
 
