@@ -6,7 +6,7 @@ on:
     # - Toutes les nuits à 04h14 de Paris (14 2)
     # ET
     # - Tous les soirs à 18h44 de Paris (44 16)
-    - cron: '14 2,17 * * *'   # <-- La virgule "2,16" regroupe les deux heures en UTC !
+    - cron: '14 2,16 * * *'
 
   workflow_dispatch:
 
@@ -19,7 +19,7 @@ jobs:
 
       # --- 1. E-MAIL AU DÉMARRAGE RÉEL ---
       - name: Envoyer un e-mail de démarrage
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@v4 # <-- Changement en v4 ici
         with:
           server_address: smtp.gmail.com
           server_port: 465
@@ -29,7 +29,7 @@ jobs:
           subject: "🤖 [Début] Le robot SST vient de se réveiller !"
           to: benoit.leroy24@gmail.com
           from: "Robot GitHub Actions"
-          body: "GitHub vient de lancer l'exécution automatique. Le scraping des 71 plages démarre."
+          body: "GitHub vient de lancer l'exécution automatique. Le scraping démarre."
 
       # --- 2. EXÉCUTION ---
       - name: Installer Python
@@ -39,7 +39,7 @@ jobs:
 
       - name: Installer les bibliothèques
         run: |
-          pip install pandas gspread google-auth playwright
+          pip install gspread google-auth playwright
           playwright install chromium
 
       - name: Exécuter le script Python
@@ -50,7 +50,7 @@ jobs:
       # --- 3. E-MAIL DE FIN ---
       - name: Envoyer un e-mail de confirmation
         if: success()
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@v4 # <-- Changement en v4 ici
         with:
           server_address: smtp.gmail.com
           server_port: 465
@@ -60,4 +60,5 @@ jobs:
           subject: "✅ [Succès] Rapport Quotidien : Températures de la mer"
           to: benoit.leroy24@gmail.com
           from: "Robot GitHub Actions"
-          file_body: rapport.txt
+          body: "Le scraping s'est terminé avec succès. Vous trouverez le rapport brut en pièce jointe."
+          attachments: rapport.txt
